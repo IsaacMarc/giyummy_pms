@@ -214,7 +214,7 @@ class _SalesScreenState extends State<SalesScreen> {
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                value: _selectedProductId,
+                                initialValue: _selectedProductId,
                                 decoration: const InputDecoration(
                                   labelText: 'Select Product',
                                   border: OutlineInputBorder(),
@@ -345,7 +345,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: _paymentMethod,
+                      initialValue: _paymentMethod,
                       decoration: const InputDecoration(
                         labelText: 'Payment Method',
                         border: OutlineInputBorder(),

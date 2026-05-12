@@ -24,9 +24,9 @@ class AlertsScreen extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Text(
+                  const Text(
                     'Alerts',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 18),
                   ),
                   if (unread > 0) ...[
