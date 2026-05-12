@@ -1,7 +1,7 @@
 import 'package:uuid/uuid.dart';
-import '../models/models.dart';
-import 'auth_service.dart';
-import 'storage_service.dart';
+import 'package:product_management/models/models.dart';
+import 'package:product_management/services/auth_service.dart';
+import 'package:product_management/services/storage_service.dart';
 
 Future<void> seedIfNeeded() async {
   final storage = StorageService.instance;

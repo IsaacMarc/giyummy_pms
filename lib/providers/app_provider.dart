@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
-import '../models/models.dart';
-import '../services/auth_service.dart';
-import '../services/storage_service.dart';
+import 'package:product_management/models/models.dart';
+import 'package:product_management/services/auth_service.dart';
+import 'package:product_management/services/storage_service.dart';
 
 const _uuid = Uuid();
 

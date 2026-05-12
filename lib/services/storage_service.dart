@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import '../models/models.dart';
+import 'package:product_management/models/models.dart';
 
 class StorageService {
   static StorageService? _instance;

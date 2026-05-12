@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import '../models/models.dart';
+import 'package:product_management/models/models.dart';
 
 class AuthService {
   static String hashPassword(String password) {
