@@ -3,23 +3,24 @@ import 'package:provider/provider.dart';
 import 'providers/app_provider.dart';
 import 'services/storage_service.dart';
 import 'services/seed_data.dart';
-import 'views/login_screen.dart';
-import 'views/register_screen.dart';
-import 'views/dashboard_screen.dart';
-import 'views/sales_screen.dart';
-import 'views/inventory_screen.dart';
-import 'views/reports_screen.dart';
-import 'views/alerts_screen.dart';
-import 'views/profile_screen.dart';
-import 'views/user_management_screen.dart';
-import 'views/maintenance_screen.dart';
-import 'views/help_screen.dart';
+import 'package:product_management/views/login_screen.dart';
+import 'package:product_management/views/register_screen.dart';
+import 'package:product_management/views/dashboard_screen.dart';
+import 'package:product_management/views/sales_screen.dart';
+import 'package:product_management/views/inventory_screen.dart';
+import 'package:product_management/views/reports_screen.dart';
+import 'package:product_management/views/alerts_screen.dart';
+import 'package:product_management/views/profile_screen.dart';
+import 'package:product_management/views/user_management_screen.dart';
+import 'package:product_management/views/maintenance_screen.dart';
+import 'package:product_management/views/help_screen.dart';
 import 'widgets/app_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await StorageService.instance.init();
-  await seedIfNeeded();
+  // Remove the await here so runApp can execute
+  StorageService.instance.init(); 
+  seedIfNeeded();
 
   runApp(
     ChangeNotifierProvider(

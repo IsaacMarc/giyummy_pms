@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/models.dart';
 
@@ -17,15 +18,28 @@ class StorageService {
 
   Future<void> init() async {
     if (_initialized) return;
-    final appDir = await getApplicationDocumentsDirectory();
-    _dataDir = Directory('${appDir.path}/product_management_data');
-    if (!_dataDir.existsSync()) {
-      _dataDir.createSync(recursive: true);
+    
+    try {
+      // This is where it was hanging
+      final appDir = await getApplicationDocumentsDirectory(); 
+      _dataDir = Directory('${appDir.path}/product_management_data');
+      
+      if (!_dataDir.existsSync()) {
+        _dataDir.createSync(recursive: true);
+      }
+      _initialized = true;
+    } catch (e) {
+      debugPrint("Storage initialization failed: $e");
     }
-    _initialized = true;
   }
 
-  File _file(String name) => File('${_dataDir.path}/$name.json');
+  File _file(String name) {
+  // If not initialized yet, point to a temporary location or throw error
+  if (!_initialized) {
+     throw Exception("StorageService not initialized");
+  }
+  return File('${_dataDir.path}/$name.json');
+  }
 
   List<dynamic> _readList(String name) {
     final f = _file(name);
