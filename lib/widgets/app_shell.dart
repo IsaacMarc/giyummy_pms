@@ -1,0 +1,255 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/app_provider.dart';
+
+class AppShell extends StatelessWidget {
+  final Widget child;
+
+  const AppShell({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Row(
+        children: [
+          const _Sidebar(),
+          Expanded(
+            child: Column(
+              children: [
+                const _TopBar(),
+                Expanded(
+                  child: Container(
+                    color: const Color(0xFFF5F7FA),
+                    child: child,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Sidebar extends StatelessWidget {
+  const _Sidebar();
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    final user = provider.currentUser;
+    final currentPage = provider.currentPage;
+
+    final navItems = [
+      const _NavItem('dashboard', 'Dashboard', Icons.dashboard_outlined),
+      const _NavItem('sales', 'Sales', Icons.point_of_sale_outlined),
+      const _NavItem('inventory', 'Inventory', Icons.inventory_2_outlined),
+      const _NavItem('reports', 'Reports', Icons.bar_chart_outlined),
+      const _NavItem('alerts', 'Alerts', Icons.notifications_outlined),
+      const _NavItem('profile', 'Profile', Icons.person_outline),
+      const _NavItem('maintenance', 'Maintenance', Icons.build_outlined),
+      const _NavItem('help', 'Help', Icons.help_outline),
+      if (user?.role == 'Admin')
+        const _NavItem('users', 'Users', Icons.manage_accounts_outlined),
+    ];
+
+    return Container(
+      width: 220,
+      color: const Color(0xFF1E293B),
+      child: Column(
+        children: [
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.blue[600],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.inventory, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 10),
+                const Flexible(
+                  child: Text(
+                    'ProductMgr',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              user?.role ?? '',
+              style: TextStyle(color: Colors.blue[300], fontSize: 12),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Divider(color: Colors.white12, height: 1),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              children: navItems.map((item) {
+                final selected = currentPage == item.page;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Material(
+                    color: selected ? Colors.blue[700] : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => provider.navigateTo(item.page),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        child: Row(
+                          children: [
+                            Icon(item.icon,
+                                color: selected
+                                    ? Colors.white
+                                    : Colors.grey[400],
+                                size: 20),
+                            const SizedBox(width: 10),
+                            Text(
+                              item.label,
+                              style: TextStyle(
+                                color: selected
+                                    ? Colors.white
+                                    : Colors.grey[400],
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const Divider(color: Colors.white12, height: 1),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => provider.logout(),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout, color: Colors.grey[400], size: 20),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Logout',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TopBar extends StatelessWidget {
+  const _TopBar();
+
+  static const _titles = {
+    'dashboard': 'Dashboard',
+    'sales': 'Sales',
+    'inventory': 'Inventory',
+    'reports': 'Reports',
+    'alerts': 'Alerts',
+    'profile': 'Profile',
+    'maintenance': 'Maintenance',
+    'help': 'Help',
+    'users': 'User Management',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    final user = provider.currentUser;
+    final title = _titles[provider.currentPage] ?? 'Dashboard';
+
+    return Container(
+      height: 64,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const Spacer(),
+          if (user != null) ...[
+            CircleAvatar(
+              backgroundColor: Colors.blue[100],
+              radius: 18,
+              child: Text(
+                user.username[0].toUpperCase(),
+                style: TextStyle(
+                  color: Colors.blue[700],
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(user.username,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14)),
+                Text(user.role,
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _NavItem {
+  final String page;
+  final String label;
+  final IconData icon;
+  const _NavItem(this.page, this.label, this.icon);
+}
