@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:product_management/models/models.dart';
+import 'package:path/path.dart' as p; 
 
 class StorageService {
   static StorageService? _instance;
@@ -17,12 +18,14 @@ class StorageService {
   }
 
   Future<void> init() async {
+    
+    
     if (_initialized) return;
     
     try {
       // This is where it was hanging
       final appDir = await getApplicationDocumentsDirectory(); 
-      _dataDir = Directory('${appDir.path}/product_management_data');
+      _dataDir = Directory(p.join(appDir.path, 'product_management_data'));
       
       if (!_dataDir.existsSync()) {
         _dataDir.createSync(recursive: true);
@@ -33,13 +36,7 @@ class StorageService {
     }
   }
 
-  File _file(String name) {
-  // If not initialized yet, point to a temporary location or throw error
-  if (!_initialized) {
-     throw Exception("StorageService not initialized");
-  }
-  return File('${_dataDir.path}/$name.json');
-  }
+  File _file(String name) => File(p.join(_dataDir.path, '$name.json'));
 
   List<dynamic> _readList(String name) {
     final f = _file(name);
@@ -61,8 +58,15 @@ class StorageService {
     }
   }
 
-  void _writeList(String name, List<dynamic> data) {
-    _file(name).writeAsStringSync(jsonEncode(data));
+  // Change _writeList to be asynchronous
+  Future<void> _writeList(String name, List<dynamic> data) async {
+    try {
+      final file = _file(name);
+      await file.writeAsString(jsonEncode(data), flush: true);
+      print("Successfully wrote $name.json"); // Verification log
+    } catch (e) {
+      print("Error writing $name: $e");
+    }
   }
 
   void _writeMap(String name, Map<String, dynamic>? data) {
@@ -78,15 +82,13 @@ class StorageService {
   List<User> getUsers() =>
       _readList('users').map((e) => User.fromJson(e as Map<String, dynamic>)).toList();
 
-  void setUsers(List<User> users) =>
-      _writeList('users', users.map((u) => u.toJson()).toList());
+  Future<void> setUsers(List<User> users) => _writeList('users', users.map((u) => u.toJson()).toList());
 
   // Products
   List<Product> getProducts() =>
       _readList('products').map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
 
-  void setProducts(List<Product> products) =>
-      _writeList('products', products.map((p) => p.toJson()).toList());
+  Future<void> setProducts(List<Product> products) => _writeList('products', products.map((p) => p.toJson()).toList());
 
   // Sales
   List<Sale> getSales() =>

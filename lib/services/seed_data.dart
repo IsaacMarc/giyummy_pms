@@ -143,6 +143,7 @@ Future<void> seedIfNeeded() async {
     ),
   ];
 
-  storage.setUsers(seedUsers);
-  storage.setProducts(seedProducts);
+  await storage.setUsers(seedUsers);
+  await storage.setProducts(seedProducts);
+  print("Seeding logic finished and saved.");
 }

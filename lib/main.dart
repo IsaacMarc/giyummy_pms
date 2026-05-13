@@ -19,8 +19,8 @@ import 'widgets/app_shell.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Remove the await here so runApp can execute
-  StorageService.instance.init(); 
-  seedIfNeeded();
+  await StorageService.instance.init(); 
+  await seedIfNeeded();
 
   runApp(
     ChangeNotifierProvider(
@@ -52,7 +52,7 @@ class ProductManagementApp extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-        ),
+        ),  
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             shape: RoundedRectangleBorder(
