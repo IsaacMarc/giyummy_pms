@@ -41,19 +41,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  void _saveProfile() {
-    final err = context.read<AppProvider>().updateProfile(
+void _saveProfile() async { // 1. Mark the method as async
+    // 2. Await the provider call directly
+    final err = await context.read<AppProvider>().updateProfile(
           email: _emailCtrl.text.trim(),
           phone: _phoneCtrl.text.trim(),
           department: _deptCtrl.text.trim(),
         );
+
+    // 3. Ensure the user hasn't navigated away while waiting
+    if (!mounted) return; 
+
+    // 4. Update the UI synchronously
     setState(() {
-      _profileMsg = err ?? 'Profile updated successfully!';
+      _profileMsg = err; // err is now the resolved String, not a Future
       _profileSuccess = err == null;
     });
   }
 
-  void _changePassword() {
+  void _changePassword() async { // Mark as async
     final current = _currentPassCtrl.text;
     final newPass = _newPassCtrl.text;
     final confirm = _confirmPassCtrl.text;
@@ -80,8 +86,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
-    final err =
-        context.read<AppProvider>().changePassword(current, newPass);
+    // Await the provider call
+    final err = await context.read<AppProvider>().changePassword(current, newPass);
+    
+    if (!mounted) return;
+
+    // Update UI synchronously
     setState(() {
       _passMsg = err ?? 'Password changed successfully!';
       _passSuccess = err == null;

@@ -1,15 +1,14 @@
 class Product {
-  final String id;
+  String id;
   String name;
   String category;
   double price;
   int stock;
   int reorderLevel;
-  final String createdAt;
-  String updatedAt;
   String barcode;
-  String? expiryDate;
   String description;
+  String createdAt;
+  String updatedAt;
 
   Product({
     required this.id,
@@ -18,44 +17,47 @@ class Product {
     required this.price,
     required this.stock,
     required this.reorderLevel,
+    this.barcode = '',
+    this.description = '',
     required this.createdAt,
     required this.updatedAt,
-    this.barcode = '',
-    this.expiryDate,
-    this.description = '',
   });
 
-  factory Product.fromJson(Map<String, dynamic> json) => Product(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        category: json['category'] as String,
-        price: (json['price'] as num).toDouble(),
-        stock: json['stock'] as int,
-        reorderLevel: json['reorder_level'] as int,
-        createdAt: json['created_at'] as String,
-        updatedAt: json['updated_at'] as String,
-        barcode: json['barcode'] as String? ?? '',
-        expiryDate: json['expiry_date'] as String?,
-        description: json['description'] as String? ?? '',
-      );
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'category': category,
-        'price': price,
-        'stock': stock,
-        'reorder_level': reorderLevel,
-        'created_at': createdAt,
-        'updated_at': updatedAt,
-        'barcode': barcode,
-        'expiry_date': expiryDate,
-        'description': description,
-      };
-
-  String get stockStatus {
-    if (stock == 0) return 'Out of Stock';
+  // ADD THIS GETTER HERE
+  String get status {
+    if (stock <= 0) return 'Out of Stock';
     if (stock <= reorderLevel) return 'Low Stock';
     return 'In Stock';
+  }
+
+  factory Product.fromJson(Map<String, dynamic> json) {
+    return Product(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      category: json['category'] as String,
+      // Use num to safely parse both ints and doubles from SQLite
+      price: (json['price'] as num).toDouble(), 
+      stock: json['stock'] as int,
+      reorderLevel: json['reorderLevel'] as int,
+      barcode: json['barcode'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      createdAt: json['createdAt'] as String? ?? DateTime.now().toIso8601String(),
+      updatedAt: json['updatedAt'] as String? ?? DateTime.now().toIso8601String(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'category': category,
+      'price': price,
+      'stock': stock,
+      'reorderLevel': reorderLevel,
+      'barcode': barcode,
+      'description': description,
+      'createdAt': createdAt, // <-- THIS WAS LIKELY MISSING
+      'updatedAt': updatedAt, // <-- THIS WAS LIKELY MISSING
+    };
   }
 }

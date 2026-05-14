@@ -259,7 +259,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         DataColumn(label: Text('Actions')),
                       ],
                       rows: filtered.map((p) {
-                        final status = p.stockStatus;
+                        final status = p.status;
                         final statusColor = status == 'Out of Stock'
                             ? Colors.red
                             : status == 'Low Stock'

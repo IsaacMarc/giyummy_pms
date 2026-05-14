@@ -5,7 +5,10 @@ import 'package:product_management/services/storage_service.dart';
 
 Future<void> seedIfNeeded() async {
   final storage = StorageService.instance;
-  final users = storage.getUsers();
+  
+  // 1. MUST await this call, as it now queries the SQLite database
+  final users = await storage.getUsers();
+  
   if (users.isNotEmpty) return;
 
   const uuid = Uuid();
@@ -21,6 +24,7 @@ Future<void> seedIfNeeded() async {
       createdAt: now,
       department: 'Management',
       phone: '+1-555-0101',
+      isActive: true, // Assuming isActive is required in your updated SQLite schema
     ),
     User(
       id: uuid.v4(),
@@ -31,6 +35,7 @@ Future<void> seedIfNeeded() async {
       createdAt: now,
       department: 'Operations',
       phone: '+1-555-0102',
+      isActive: true,
     ),
     User(
       id: uuid.v4(),
@@ -41,6 +46,7 @@ Future<void> seedIfNeeded() async {
       createdAt: now,
       department: 'Sales',
       phone: '+1-555-0103',
+      isActive: true,
     ),
   ];
 
@@ -143,7 +149,14 @@ Future<void> seedIfNeeded() async {
     ),
   ];
 
-  await storage.setUsers(seedUsers);
-  await storage.setProducts(seedProducts);
-  print("Seeding logic finished and saved.");
+  // 2. Iterate and insert records using the SQLite methods
+  for (var user in seedUsers) {
+    await storage.saveUser(user);
+  }
+
+  for (var product in seedProducts) {
+    await storage.saveProduct(product);
+  }
+
+  print("SQLite database securely seeded.");
 }

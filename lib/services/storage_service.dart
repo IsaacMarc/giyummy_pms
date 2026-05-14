@@ -1,145 +1,203 @@
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../models/models.dart';
+import 'database_service.dart';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:product_management/models/models.dart';
-import 'package:path/path.dart' as p; 
 
 class StorageService {
-  static StorageService? _instance;
-  late Directory _dataDir;
-  bool _initialized = false;
+  static final StorageService instance = StorageService._internal();
+  StorageService._internal();
 
-  StorageService._();
+  User? _currentUser;
 
-  static StorageService get instance {
-    _instance ??= StorageService._();
-    return _instance!;
-  }
-
+  // We no longer need the complex Directory init() here because 
+  // DatabaseService handles it.
   Future<void> init() async {
+    await DatabaseService.instance.database;
+  }
+
+  // Session Management (Still kept in memory for quick access)
+  void setCurrentUser(User? user) => _currentUser = user;
+  User? getCurrentUser() => _currentUser;
+
+  // ─── Users ────────────────────────────────────────────────────────
+
+  Future<List<User>> getUsers() async {
+    final db = await DatabaseService.instance.database;
+    final result = await db.query('users');
     
-    
-    if (_initialized) return;
-    
+    // Convert SQLite 1/0 integers back to Dart booleans
+    return result.map((json) {
+      final map = Map<String, dynamic>.from(json);
+      map['isActive'] = map['isActive'] == 1;
+      return User.fromJson(map);
+    }).toList();
+  }
+
+  Future<void> saveUser(User user) async {
+    final db = await DatabaseService.instance.database;
+    final map = user.toJson();
+    map['isActive'] = user.isActive ? 1 : 0; // SQLite doesn't have booleans
+
+    await db.insert(
+      'users',
+      map,
+      conflictAlgorithm: ConflictAlgorithm.replace, // Updates if ID exists
+    );
+  }
+
+  Future<void> deleteUser(String id) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete('users', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ─── Products ─────────────────────────────────────────────────────
+
+  Future<List<Product>> getProducts() async {
+    final db = await DatabaseService.instance.database;
+    final result = await db.query('products');
+    return result.map((json) => Product.fromJson(json)).toList();
+  }
+
+  Future<void> saveProduct(Product product) async {
+    final db = await DatabaseService.instance.database;
+    await db.insert(
+      'products',
+      product.toJson(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> deleteProduct(String id) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete('products', where: 'id = ?', whereArgs: [id]);
+  }
+  // ─── Audit Logs ───────────────────────────────────────────────────
+
+  Future<List<AuditLog>> getAuditLogs() async {
+    final db = await DatabaseService.instance.database;
+    // Get logs, automatically sorted by newest first
+    final result = await db.query('audit_logs', orderBy: 'timestamp DESC');
+    return result.map((json) => AuditLog.fromJson(json)).toList();
+  }
+
+  Future<void> saveAuditLog(AuditLog log) async {
+    final db = await DatabaseService.instance.database;
+    await db.insert(
+      'audit_logs',
+      log.toJson(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  // ─── Backups ──────────────────────────────────────────────────────
+
+  Future<List<Backup>> getBackups() async {
+    final db = await DatabaseService.instance.database;
+    final result = await db.query('backups', orderBy: 'timestamp DESC');
+    return result.map((json) => Backup.fromJson(json)).toList();
+  }
+
+  Future<void> saveBackupRecord(Backup backup) async {
+    final db = await DatabaseService.instance.database;
+    await db.insert(
+      'backups',
+      backup.toJson(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  // ─── Export Logic for Backups ─────────────────────────────────────
+
+  // Gathers data from all SQLite tables and packages it into a map
+  Future<Map<String, dynamic>> exportAllData() async {
+    final db = await DatabaseService.instance.database;
+    return {
+      'users': await db.query('users'),
+      'products': await db.query('products'),
+      // Add 'sales', 'alerts', etc. here once you create those tables
+    };
+  }
+
+  // Writes the exported map to a physical JSON file on the computer
+  Future<void> saveBackupFile(String filename, Map<String, dynamic> data) async {
     try {
-      // This is where it was hanging
-      final appDir = await getApplicationDocumentsDirectory(); 
-      _dataDir = Directory(p.join(appDir.path, 'product_management_data'));
+      final appDir = await getApplicationDocumentsDirectory();
+      final backupDir = Directory(p.join(appDir.path, 'product_management_data', 'backups'));
       
-      if (!_dataDir.existsSync()) {
-        _dataDir.createSync(recursive: true);
+      if (!await backupDir.exists()) {
+        await backupDir.create(recursive: true);
       }
-      _initialized = true;
-    } catch (e) {
-      debugPrint("Storage initialization failed: $e");
-    }
-  }
-
-  File _file(String name) => File(p.join(_dataDir.path, '$name.json'));
-
-  List<dynamic> _readList(String name) {
-    final f = _file(name);
-    if (!f.existsSync()) return [];
-    try {
-      return jsonDecode(f.readAsStringSync()) as List<dynamic>;
-    } catch (_) {
-      return [];
-    }
-  }
-
-  Map<String, dynamic>? _readMap(String name) {
-    final f = _file(name);
-    if (!f.existsSync()) return null;
-    try {
-      return jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  // Change _writeList to be asynchronous
-  Future<void> _writeList(String name, List<dynamic> data) async {
-    try {
-      final file = _file(name);
+      
+      final file = File(p.join(backupDir.path, filename));
       await file.writeAsString(jsonEncode(data), flush: true);
-      print("Successfully wrote $name.json"); // Verification log
+      print("Backup successfully created at ${file.path}");
     } catch (e) {
-      print("Error writing $name: $e");
+      print("Error creating backup file: $e");
     }
   }
+  
+  // ─── Sales ────────────────────────────────────────────────────────
 
-  void _writeMap(String name, Map<String, dynamic>? data) {
-    if (data == null) {
-      final f = _file(name);
-      if (f.existsSync()) f.deleteSync();
-    } else {
-      _file(name).writeAsStringSync(jsonEncode(data));
-    }
+  Future<List<Sale>> getSales() async {
+    final db = await DatabaseService.instance.database;
+    final result = await db.query('sales', orderBy: 'timestamp DESC');
+    
+    return result.map((row) {
+      final map = Map<String, dynamic>.from(row);
+      // Decode the stringified JSON list back into a List of dynamic objects
+      map['items'] = jsonDecode(map['items'] as String);
+      return Sale.fromJson(map);
+    }).toList();
   }
 
-  // Users
-  List<User> getUsers() =>
-      _readList('users').map((e) => User.fromJson(e as Map<String, dynamic>)).toList();
+  Future<void> saveSale(Sale sale) async {
+    final db = await DatabaseService.instance.database;
+    final map = sale.toJson();
+    
+    // Encode the List of items into a flat JSON string for SQLite storage
+    map['items'] = jsonEncode(map['items']);
 
-  Future<void> setUsers(List<User> users) => _writeList('users', users.map((u) => u.toJson()).toList());
-
-  // Products
-  List<Product> getProducts() =>
-      _readList('products').map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
-
-  Future<void> setProducts(List<Product> products) => _writeList('products', products.map((p) => p.toJson()).toList());
-
-  // Sales
-  List<Sale> getSales() =>
-      _readList('sales').map((e) => Sale.fromJson(e as Map<String, dynamic>)).toList();
-
-  void setSales(List<Sale> sales) =>
-      _writeList('sales', sales.map((s) => s.toJson()).toList());
-
-  // Alerts
-  List<Alert> getAlerts() =>
-      _readList('alerts').map((e) => Alert.fromJson(e as Map<String, dynamic>)).toList();
-
-  void setAlerts(List<Alert> alerts) =>
-      _writeList('alerts', alerts.map((a) => a.toJson()).toList());
-
-  // Audit Logs
-  List<AuditLog> getAuditLogs() =>
-      _readList('audit_logs').map((e) => AuditLog.fromJson(e as Map<String, dynamic>)).toList();
-
-  void setAuditLogs(List<AuditLog> logs) =>
-      _writeList('audit_logs', logs.map((l) => l.toJson()).toList());
-
-  // Backups
-  List<Backup> getBackups() =>
-      _readList('backups').map((e) => Backup.fromJson(e as Map<String, dynamic>)).toList();
-
-  void setBackups(List<Backup> backups) =>
-      _writeList('backups', backups.map((b) => b.toJson()).toList());
-
-  // Current user session
-  User? getCurrentUser() {
-    final data = _readMap('current_user');
-    if (data == null) return null;
-    return User.fromJson(data);
+    await db.insert(
+      'sales',
+      map,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
-  void setCurrentUser(User? user) => _writeMap('current_user', user?.toJson());
+  // ─── Alerts ───────────────────────────────────────────────────────
 
-  // Raw backup export
-  String get dataDirectoryPath => _dataDir.path;
-
-  Map<String, dynamic> exportAllData() => {
-        'users': getUsers().map((u) => u.toJson()).toList(),
-        'products': getProducts().map((p) => p.toJson()).toList(),
-        'sales': getSales().map((s) => s.toJson()).toList(),
-        'alerts': getAlerts().map((a) => a.toJson()).toList(),
-        'audit_logs': getAuditLogs().map((l) => l.toJson()).toList(),
-      };
-
-  void saveBackupFile(String filename, Map<String, dynamic> data) {
-    final file = File('${_dataDir.path}/$filename');
-    file.writeAsStringSync(jsonEncode(data));
+  Future<List<Alert>> getAlerts() async {
+    final db = await DatabaseService.instance.database;
+    final result = await db.query('alerts', orderBy: 'timestamp DESC');
+    
+    return result.map((row) {
+      final map = Map<String, dynamic>.from(row);
+      // Convert SQLite integer back to Dart boolean
+      map['read'] = map['read'] == 1;
+      return Alert.fromJson(map);
+    }).toList();
   }
+
+  Future<void> saveAlert(Alert alert) async {
+    final db = await DatabaseService.instance.database;
+    final map = alert.toJson();
+    
+    // Convert Dart boolean to SQLite integer
+    map['read'] = alert.read ? 1 : 0;
+
+    await db.insert(
+      'alerts',
+      map,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> deleteAlert(String id) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete('alerts', where: 'id = ?', whereArgs: [id]);
+  }
+
 }

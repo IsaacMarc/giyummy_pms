@@ -15,9 +15,18 @@ import 'package:product_management/views/user_management_screen.dart';
 import 'package:product_management/views/maintenance_screen.dart';
 import 'package:product_management/views/help_screen.dart';
 import 'widgets/app_shell.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // Add this import
+import 'dart:io'; // Add this import
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize desktop DB factory before anything else
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+  
   // Remove the await here so runApp can execute
   await StorageService.instance.init(); 
   await seedIfNeeded();

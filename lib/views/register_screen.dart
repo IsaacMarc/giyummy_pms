@@ -54,12 +54,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     final err = context.read<AppProvider>().register(username, email, password);
-    if (err != null) {
-      setState(() => _error = err);
-    } else {
-      setState(() => _success = 'Account created! You can now sign in.');
+    setState(() async => _error = await err);
     }
-  }
 
   @override
   Widget build(BuildContext context) {

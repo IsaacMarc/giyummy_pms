@@ -1,14 +1,14 @@
 class User {
   final String id;
-  String username;
+  final String username;
   String passwordHash;
-  String role; // 'Admin', 'Manager', 'Employee'
+  final String role; 
   String email;
   final String createdAt;
-  bool isActive;
   String? lastLogin;
-  String phone;
-  String department;
+  bool isActive;
+  String department; // Added
+  String phone;      // Added
 
   User({
     required this.id,
@@ -17,58 +17,40 @@ class User {
     required this.role,
     required this.email,
     required this.createdAt,
-    this.isActive = true,
     this.lastLogin,
-    this.phone = '',
-    this.department = '',
+    this.isActive = true, // Default to true
+    this.department = '', // Default to empty string
+    this.phone = '',      // Default to empty string
   });
 
-  factory User.fromJson(Map<String, dynamic> json) => User(
-        id: json['id'] as String,
-        username: json['username'] as String,
-        passwordHash: json['password_hash'] as String,
-        role: json['role'] as String,
-        email: json['email'] as String,
-        createdAt: json['created_at'] as String,
-        isActive: json['is_active'] as bool? ?? true,
-        lastLogin: json['last_login'] as String?,
-        phone: json['phone'] as String? ?? '',
-        department: json['department'] as String? ?? '',
-      );
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      id: json['id'] as String,
+      username: json['username'] as String,
+      passwordHash: json['passwordHash'] as String,
+      role: json['role'] as String,
+      email: json['email'] as String? ?? '',
+      createdAt: json['createdAt'] as String,
+      lastLogin: json['lastLogin'] as String?,
+      // SQLite stores booleans as 1 or 0, so we check if it equals 1 or true
+      isActive: json['isActive'] == 1 || json['isActive'] == true,
+      department: json['department'] as String? ?? '',
+      phone: json['phone'] as String? ?? '',
+    );
+  }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'username': username,
-        'password_hash': passwordHash,
-        'role': role,
-        'email': email,
-        'created_at': createdAt,
-        'is_active': isActive,
-        'last_login': lastLogin,
-        'phone': phone,
-        'department': department,
-      };
-
-  User copyWith({
-    String? username,
-    String? passwordHash,
-    String? role,
-    String? email,
-    bool? isActive,
-    String? lastLogin,
-    String? phone,
-    String? department,
-  }) =>
-      User(
-        id: id,
-        username: username ?? this.username,
-        passwordHash: passwordHash ?? this.passwordHash,
-        role: role ?? this.role,
-        email: email ?? this.email,
-        createdAt: createdAt,
-        isActive: isActive ?? this.isActive,
-        lastLogin: lastLogin ?? this.lastLogin,
-        phone: phone ?? this.phone,
-        department: department ?? this.department,
-      );
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'username': username,
+      'passwordHash': passwordHash,
+      'role': role,
+      'email': email,
+      'createdAt': createdAt,
+      'lastLogin': lastLogin,
+      'isActive': isActive ? 1 : 0, // Convert to SQLite integer format
+      'department': department,
+      'phone': phone,
+    };
+  }
 }

@@ -31,8 +31,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final err = context
         .read<AppProvider>()
         .login(_usernameCtrl.text.trim(), _passwordCtrl.text);
-    setState(() {
-      _error = err;
+    setState(() async {
+      _error = await err;
       _loading = false;
     });
   }
