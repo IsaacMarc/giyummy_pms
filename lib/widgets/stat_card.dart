@@ -5,6 +5,7 @@ class StatCard extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color color;
+  final Color background_icon_color;
   final String? subtitle;
 
   const StatCard({
@@ -13,6 +14,7 @@ class StatCard extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.color,
+    required this.background_icon_color,
     this.subtitle,
   });
 
@@ -27,7 +29,7 @@ class StatCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: background_icon_color,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: color, size: 28),

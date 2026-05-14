@@ -49,26 +49,31 @@ class DashboardScreen extends StatelessWidget {
                 value: '${products.length}',
                 icon: Icons.inventory_2_outlined,
                 color: Colors.blue,
-                subtitle: '${outOfStock.length} out of stock',
+                background_icon_color: const Color.fromARGB(255, 166, 227, 255),
+                subtitle: '${outOfStock.length} out o f stock',
               ),
               StatCard(
                 title: "Today's Sales",
                 value: '${todaySales.length}',
                 icon: Icons.receipt_long_outlined,
-                color: Colors.green,
+                color: const Color.fromARGB(255, 38, 121, 41),
+                background_icon_color: const Color.fromARGB(255, 145, 255, 149),
+
                 subtitle: 'transactions',
               ),
               StatCard(
                 title: "Today's Revenue",
                 value: fmt.format(todayRevenue),
                 icon: Icons.attach_money,
-                color: Colors.orange,
+                color: const Color.fromARGB(255, 209, 125, 0),
+                background_icon_color: const Color.fromARGB(255, 255, 211, 146)
               ),
               StatCard(
                 title: 'Active Alerts',
                 value: '$unreadAlerts',
                 icon: Icons.notifications_active_outlined,
                 color: Colors.red,
+                background_icon_color: const Color.fromARGB(255, 255, 185, 180),
                 subtitle: 'unread',
               ),
             ],
@@ -88,7 +93,7 @@ class DashboardScreen extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.warning_amber_outlined,
+                            Icon(Icons.warning_rounded,
                                 color: Colors.orange[700], size: 20),
                             const SizedBox(width: 8),
                             const Text('Low Stock Alert',
@@ -153,7 +158,7 @@ class DashboardScreen extends StatelessWidget {
                 child: _summaryCard(
                   'Total Revenue',
                   fmt.format(totalRevenue),
-                  Icons.monetization_on_outlined,
+                  Icons.stacked_line_chart,
                   Colors.green,
                 ),
               ),
