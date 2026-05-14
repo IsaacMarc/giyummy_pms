@@ -23,16 +23,25 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _login() {
+  void _login() async { // 1. Add 'async' to the main method
+    
+    // 2. Synchronously set the loading state so the spinner appears
     setState(() {
       _error = null;
       _loading = true;
     });
-    final err = context
+
+    // 3. Await the database login call OUTSIDE of setState
+    final err = await context
         .read<AppProvider>()
         .login(_usernameCtrl.text.trim(), _passwordCtrl.text);
-    setState(() async {
-      _error = await err;
+
+    // 4. Ensure the widget is still on-screen before updating UI
+    if (!mounted) return;
+
+    // 5. Synchronously update the state with the final result
+    setState(() {
+      _error = err; // 'err' is now the resolved String, not a Future
       _loading = false;
     });
   }

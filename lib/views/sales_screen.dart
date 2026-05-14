@@ -19,6 +19,9 @@ class _SalesScreenState extends State<SalesScreen> {
   String? _selectedProductId;
   String? _error;
   String? _success;
+  
+  // 1. ADDED: Missing boolean for the loading state
+  bool _isProcessing = false; 
 
   static const _paymentMethods = ['Cash', 'Card', 'Mobile Payment'];
 
@@ -36,8 +39,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   void _addToCart(List<Product> products) {
     if (_selectedProductId == null) return;
-    final product =
-        products.firstWhere((p) => p.id == _selectedProductId, orElse: () => products.first);
+    final product = products.firstWhere((p) => p.id == _selectedProductId, orElse: () => products.first);
     _addProductToCart(product);
   }
 
@@ -56,6 +58,7 @@ class _SalesScreenState extends State<SalesScreen> {
       setState(() {
         _cart[idx].quantity++;
         _error = null;
+        _success = null;
       });
     } else {
       setState(() {
@@ -66,6 +69,7 @@ class _SalesScreenState extends State<SalesScreen> {
           price: product.price,
         ));
         _error = null;
+        _success = null;
       });
     }
   }
@@ -74,9 +78,7 @@ class _SalesScreenState extends State<SalesScreen> {
     final barcode = _barcodeCtrl.text.trim();
     if (barcode.isEmpty) return;
     try {
-      final product = products.firstWhere(
-        (p) => p.barcode == barcode,
-      );
+      final product = products.firstWhere((p) => p.barcode == barcode);
       _addProductToCart(product);
       _barcodeCtrl.clear();
     } catch (_) {
@@ -89,18 +91,48 @@ class _SalesScreenState extends State<SalesScreen> {
     setState(() => _cart.removeAt(index));
   }
 
-  void _completeSale() {
-  if (_cart.isEmpty) {
-    setState(() => _error = 'Cart is empty');
-    return;
+  // 2. ADDED: 'async' keyword
+  void _completeSale() async {
+    if (_cart.isEmpty) {
+      setState(() => _error = 'Cart is empty');
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+      _error = null;
+      _success = null;
+    });
+
+    // 3. FIXED: Changed _discount to _discountPct
+    final err = await context.read<AppProvider>().addSale(
+          _cart,
+          _discountPct, 
+          _paymentMethod,
+        );
+
+    if (!mounted) return;
+    
+    setState(() => _isProcessing = false);
+
+    if (err != null) {
+      // 4. FIXED: Display provider error on the UI safely
+      setState(() => _error = err);
+      return;
+    }
+    
+    // 5. FIXED: Clear the cart and reset values on a successful sale!
+    setState(() {
+      _cart.clear();
+      _discountCtrl.text = '0';
+      _barcodeCtrl.clear();
+      _success = 'Sale completed successfully!';
+    });
   }
-  
-  final err = context
-      .read<AppProvider>()
-      .addSale(_cart, _discountPct, _paymentMethod);
-      
-  setState(() async => _error = await err);
-}
+
+  // ==========================================
+  // KEEP YOUR @override Widget build(...) BELOW 
+  // ==========================================
 
   @override
   Widget build(BuildContext context) {

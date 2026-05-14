@@ -18,6 +18,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _success;
   bool _obscure = true;
   bool _obscureConfirm = true;
+  
+  bool _loading = false; 
 
   @override
   void dispose() {
@@ -28,34 +30,43 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _register() {
-    final username = _usernameCtrl.text.trim();
-    final email = _emailCtrl.text.trim();
-    final password = _passwordCtrl.text;
-    final confirm = _confirmCtrl.text;
-
-    setState(() => _error = null);
-
-    if (username.isEmpty || email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'All fields are required');
-      return;
-    }
-    if (password.length < 6) {
-      setState(() => _error = 'Password must be at least 6 characters');
-      return;
-    }
-    if (password != confirm) {
+  void _register() async { 
+    if (_passwordCtrl.text != _confirmCtrl.text) {
       setState(() => _error = 'Passwords do not match');
       return;
     }
-    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
-      setState(() => _error = 'Invalid email format');
-      return;
-    }
 
-    final err = context.read<AppProvider>().register(username, email, password);
-    setState(() async => _error = await err);
+    setState(() {
+      _error = null;
+      _loading = true; // This will now work perfectly
+    });
+
+    // Await the database registration
+    final err = await context.read<AppProvider>().register(
+          _usernameCtrl.text.trim(),
+          _emailCtrl.text.trim(),
+          _passwordCtrl.text,
+        );
+
+    if (!mounted) return;
+
+    // Update state synchronously
+    setState(() {
+      _error = err;
+      _loading = false;
+    });
+
+    if (err == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Registration successful! Please login.')),
+      );
+      Navigator.pop(context);
     }
+  }
+  
+  // ==========================================
+  // KEEP YOUR @override Widget build(...) BELOW 
+  // ==========================================
 
   @override
   Widget build(BuildContext context) {
