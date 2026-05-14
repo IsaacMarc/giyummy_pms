@@ -50,7 +50,6 @@ class DashboardScreen extends StatelessWidget {
                 icon: Icons.inventory_2_outlined,
                 color: Colors.blue,
                 background_icon_color: const Color.fromARGB(255, 166, 227, 255),
-                subtitle: '${outOfStock.length} out o f stock',
               ),
               StatCard(
                 title: "Today's Sales",
@@ -58,8 +57,6 @@ class DashboardScreen extends StatelessWidget {
                 icon: Icons.receipt_long_outlined,
                 color: const Color.fromARGB(255, 38, 121, 41),
                 background_icon_color: const Color.fromARGB(255, 145, 255, 149),
-
-                subtitle: 'transactions',
               ),
               StatCard(
                 title: "Today's Revenue",
@@ -74,7 +71,6 @@ class DashboardScreen extends StatelessWidget {
                 icon: Icons.notifications_active_outlined,
                 color: Colors.red,
                 background_icon_color: const Color.fromARGB(255, 255, 185, 180),
-                subtitle: 'unread',
               ),
             ],
           ),
@@ -86,6 +82,7 @@ class DashboardScreen extends StatelessWidget {
               Expanded(
                 child: Card(
                   elevation: 2,
+                  color: Colors.white,
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
@@ -122,6 +119,7 @@ class DashboardScreen extends StatelessWidget {
               Expanded(
                 child: Card(
                   elevation: 2,
+                  color: Colors.white,
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(

@@ -90,28 +90,35 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _completeSale() {
-    if (_cart.isEmpty) {
-      setState(() => _error = 'Cart is empty');
-      return;
-    }
-    final err = context
-        .read<AppProvider>()
-        .addSale(_cart, _discountPct, _paymentMethod);
-    if (err != null) {
-      setState(() => _error = err);
-    } else {
-      setState(() {
-        _cart.clear();
-        _discountCtrl.text = '0';
-        _paymentMethod = 'Cash';
-        _selectedProductId = null;
-        _error = null;
-        _success = 'Sale completed successfully!';
-      });
-      Future.delayed(
-          const Duration(seconds: 3), () => setState(() => _success = null));
-    }
+  if (_cart.isEmpty) {
+    setState(() => _error = 'Cart is empty');
+    return;
   }
+  
+  final err = context
+      .read<AppProvider>()
+      .addSale(_cart, _discountPct, _paymentMethod);
+      
+  if (err != null) {
+    setState(() => _error = err);
+  } else {
+    setState(() {
+      _cart.clear();
+      _discountCtrl.text = '0';
+      _paymentMethod = 'Cash';
+      _selectedProductId = null;
+      _error = null;
+      _success = 'Sale completed successfully!';
+    });
+
+    // FIX: Check if the widget is still in the tree before calling setState
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() => _success = null);
+      }
+    });
+  }
+}
 
   @override
   Widget build(BuildContext context) {
