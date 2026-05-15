@@ -226,31 +226,85 @@ Future<void> restoreSession() async {
     await _storage.deleteAlert(alertId);
   }
 
-  Future<void> _generateStockAlerts() async {
+  Future<void> _processExpirations() async {
+    bool changesMade = false;
+    for (var p in _products) {
+      if (p.expirationDate != null && p.stock > 0) {
+        final expDate = DateTime.parse(p.expirationDate!);
+        
+        // If expired AND autoDispose is turned on
+        if (DateTime.now().isAfter(expDate) && p.autoDispose) {
+          final dumpedAmount = p.stock;
+          p.stock = 0; // Dump the expired stock
+          p.updatedAt = DateTime.now().toIso8601String();
+          
+          await _storage.saveProduct(p);
+          await _addAuditLog('DISPOSE', 'Inventory', 'Auto-dumped $dumpedAmount expired units of ${p.name}');
+          changesMade = true;
+        }
+      }
+    }
+    if (changesMade) notifyListeners();
+  }
+
+Future<void> _generateStockAlerts() async {
+    // 1. Run the auto-dump check first
+    await _processExpirations();
+
     final existingProductAlerts = _alerts.map((a) => a.productId).toSet();
 
     for (final product in _products) {
       if (existingProductAlerts.contains(product.id)) continue;
       
       Alert? newAlert;
-      if (product.stock == 0) {
-        newAlert = Alert(
-          id: _uuid.v4(),
-          type: 'low-stock',
-          severity: 'critical',
-          message: 'OUT OF STOCK: ${product.name} has no stock remaining.',
-          timestamp: DateTime.now().toIso8601String(),
-          productId: product.id,
-        );
-      } else if (product.stock <= product.reorderLevel) {
-        newAlert = Alert(
-          id: _uuid.v4(),
-          type: 'low-stock',
-          severity: 'warning',
-          message: 'LOW STOCK: ${product.name} has ${product.stock} units remaining.',
-          timestamp: DateTime.now().toIso8601String(),
-          productId: product.id,
-        );
+      
+      // -- NEW EXPIRATION ALERT LOGIC --
+      if (product.expirationDate != null && product.stock > 0) {
+        final expDate = DateTime.parse(product.expirationDate!);
+        final daysUntilExp = expDate.difference(DateTime.now()).inDays;
+
+        if (daysUntilExp < 0) {
+          newAlert = Alert(
+            id: _uuid.v4(),
+            type: 'expired',
+            severity: 'critical',
+            message: 'EXPIRED: ${product.name} passed its expiration date. Please remove from shelves.',
+            timestamp: DateTime.now().toIso8601String(),
+            productId: product.id,
+          );
+        } else if (daysUntilExp <= 7) {
+          newAlert = Alert(
+            id: _uuid.v4(),
+            type: 'expiring-soon',
+            severity: 'warning',
+            message: 'EXPIRING SOON: ${product.name} expires in $daysUntilExp days.',
+            timestamp: DateTime.now().toIso8601String(),
+            productId: product.id,
+          );
+        }
+      }
+
+      // -- EXISTING STOCK ALERT LOGIC --
+      if (newAlert == null) {
+        if (product.stock == 0) {
+          newAlert = Alert(
+            id: _uuid.v4(),
+            type: 'low-stock',
+            severity: 'critical',
+            message: 'OUT OF STOCK: ${product.name} has no stock remaining.',
+            timestamp: DateTime.now().toIso8601String(),
+            productId: product.id,
+          );
+        } else if (product.stock <= product.reorderLevel) {
+          newAlert = Alert(
+            id: _uuid.v4(),
+            type: 'low-stock',
+            severity: 'warning',
+            message: 'LOW STOCK: ${product.name} has ${product.stock} units remaining.',
+            timestamp: DateTime.now().toIso8601String(),
+            productId: product.id,
+          );
+        }
       }
 
       if (newAlert != null) {

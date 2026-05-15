@@ -9,6 +9,8 @@ class Product {
   String description;
   String createdAt;
   String updatedAt;
+  String? expirationDate; // NEW: Optional expiration date
+  bool autoDispose;       // NEW: Automatically dump stock if expired
 
   Product({
     required this.id,
@@ -21,10 +23,16 @@ class Product {
     this.description = '',
     required this.createdAt,
     required this.updatedAt,
+    this.expirationDate,
+    this.autoDispose = false,
   });
 
-  // ADD THIS GETTER HERE
   String get status {
+    if (expirationDate != null && stock > 0) {
+      final exp = DateTime.parse(expirationDate!);
+      // If the current date is after the expiration date
+      if (DateTime.now().isAfter(exp)) return 'Expired';
+    }
     if (stock <= 0) return 'Out of Stock';
     if (stock <= reorderLevel) return 'Low Stock';
     return 'In Stock';
@@ -35,7 +43,6 @@ class Product {
       id: json['id'] as String,
       name: json['name'] as String,
       category: json['category'] as String,
-      // Use num to safely parse both ints and doubles from SQLite
       price: (json['price'] as num).toDouble(), 
       stock: json['stock'] as int,
       reorderLevel: json['reorderLevel'] as int,
@@ -43,6 +50,8 @@ class Product {
       description: json['description'] as String? ?? '',
       createdAt: json['createdAt'] as String? ?? DateTime.now().toIso8601String(),
       updatedAt: json['updatedAt'] as String? ?? DateTime.now().toIso8601String(),
+      expirationDate: json['expirationDate'] as String?,
+      autoDispose: json['autoDispose'] == 1 || json['autoDispose'] == true,
     );
   }
 
@@ -56,8 +65,10 @@ class Product {
       'reorderLevel': reorderLevel,
       'barcode': barcode,
       'description': description,
-      'createdAt': createdAt, // <-- THIS WAS LIKELY MISSING
-      'updatedAt': updatedAt, // <-- THIS WAS LIKELY MISSING
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+      'expirationDate': expirationDate,
+      'autoDispose': autoDispose ? 1 : 0, // Convert to SQLite integer
     };
   }
 }

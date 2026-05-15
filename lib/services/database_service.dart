@@ -52,7 +52,7 @@ class DatabaseService {
       )
     ''');
 
-    // Create Products Table
+//Create Products Table
     await db.execute('''
       CREATE TABLE products (
         id TEXT PRIMARY KEY,
@@ -64,7 +64,9 @@ class DatabaseService {
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
         barcode TEXT NOT NULL,
-        description TEXT NOT NULL
+        description TEXT NOT NULL,
+        expirationDate TEXT,             -- NEW
+        autoDispose INTEGER NOT NULL DEFAULT 0 -- NEW
       )
     ''');
 //Create Audit Logs Table
