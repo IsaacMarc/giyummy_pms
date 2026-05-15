@@ -52,29 +52,40 @@ class Sale {
     this.status = 'completed',
   });
 
-  factory Sale.fromJson(Map<String, dynamic> json) => Sale(
-        id: json['id'] as String,
-        items: (json['items'] as List)
-            .map((i) => SaleItem.fromJson(i as Map<String, dynamic>))
-            .toList(),
-        total: (json['total'] as num).toDouble(),
-        discount: (json['discount'] as num).toDouble(),
-        finalTotal: (json['final_total'] as num).toDouble(),
-        paymentMethod: json['payment_method'] as String,
-        cashierName: json['cashier_name'] as String,
-        timestamp: json['timestamp'] as String,
-        status: json['status'] as String? ?? 'completed',
-      );
+  factory Sale.fromJson(Map<String, dynamic> json) {
+    return Sale(
+      id: json['id'] as String,
+      
+      // Keep your existing items parsing logic here
+      items: (json['items'] as List<dynamic>)
+          .map((i) => SaleItem.fromJson(i as Map<String, dynamic>))
+          .toList(),
+          
+      total: (json['total'] as num).toDouble(),
+      discount: (json['discount'] as num).toDouble(),
+      
+      // THESE THREE LINES NEED TO BE UPDATED TO CAMELCASE:
+      finalTotal: (json['finalTotal'] as num).toDouble(),       // Fixed from final_total
+      paymentMethod: json['paymentMethod'] as String,           // Fixed from payment_method
+      cashierName: json['cashierName'] as String,               // Fixed from cashier_name
+      
+      timestamp: json['timestamp'] as String,
+      status: json['status'] as String? ?? 'completed',         // Added status
+    );
+  }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'items': items.map((i) => i.toJson()).toList(),
-        'total': total,
-        'discount': discount,
-        'final_total': finalTotal,
-        'payment_method': paymentMethod,
-        'cashier_name': cashierName,
-        'timestamp': timestamp,
-        'status': status,
-      };
+Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      // Keep items exactly like this, StorageService will encode it
+      'items': items.map((i) => i.toJson()).toList(), 
+      'total': total,
+      'discount': discount,
+      'finalTotal': finalTotal,       // Fixed from final_total
+      'paymentMethod': paymentMethod, // Fixed from payment_method
+      'cashierName': cashierName,     // Fixed from cashier_name
+      'timestamp': timestamp,
+      'status': status,               // Keep this, we will add it to the DB next
+    };
+  }
 }

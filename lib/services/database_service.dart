@@ -90,17 +90,18 @@ class DatabaseService {
       )
     ''');
 
-    //Create Sales Table
+// 3. Create Sales Table
     await db.execute('''
       CREATE TABLE sales (
         id TEXT PRIMARY KEY,
-        items TEXT NOT NULL, -- Will store the List<SaleItem> as a JSON string
+        items TEXT NOT NULL, 
         total REAL NOT NULL,
         discount REAL NOT NULL,
         finalTotal REAL NOT NULL,
         paymentMethod TEXT NOT NULL,
         cashierName TEXT NOT NULL,
-        timestamp TEXT NOT NULL
+        timestamp TEXT NOT NULL,
+        status TEXT NOT NULL      -- Notice: No comma at the end of this line!
       )
     ''');
 

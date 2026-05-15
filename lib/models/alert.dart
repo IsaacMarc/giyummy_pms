@@ -1,11 +1,11 @@
 class Alert {
-  final String id;
-  final String type; // 'low-stock', 'expiring', 'restock', 'system'
-  final String severity; // 'info', 'warning', 'critical'
-  final String message;
-  final String timestamp;
+  String id;
+  String type;
+  String severity;
+  String message;
+  String timestamp;
+  String? productId;
   bool read;
-  final String? productId;
 
   Alert({
     required this.id,
@@ -13,27 +13,32 @@ class Alert {
     required this.severity,
     required this.message,
     required this.timestamp,
-    this.read = false,
     this.productId,
+    this.read = false,
   });
 
-  factory Alert.fromJson(Map<String, dynamic> json) => Alert(
-        id: json['id'] as String,
-        type: json['type'] as String,
-        severity: json['severity'] as String,
-        message: json['message'] as String,
-        timestamp: json['timestamp'] as String,
-        read: json['read'] as bool? ?? false,
-        productId: json['product_id'] as String?,
-      );
+  factory Alert.fromJson(Map<String, dynamic> json) {
+    return Alert(
+      id: json['id'] as String,
+      type: json['type'] as String,
+      severity: json['severity'] as String,
+      message: json['message'] as String,
+      timestamp: json['timestamp'] as String,
+      productId: json['productId'] as String?, // Fixed from product_id
+      // Convert SQLite integer back to boolean
+      read: json['read'] == 1 || json['read'] == true, 
+    );
+  }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type,
-        'severity': severity,
-        'message': message,
-        'timestamp': timestamp,
-        'read': read,
-        'product_id': productId,
-      };
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'type': type,
+      'severity': severity,
+      'message': message,
+      'timestamp': timestamp,
+      'productId': productId, // Fixed from product_id
+      'read': read ? 1 : 0,   // Convert boolean to SQLite integer
+    };
+  }
 }
