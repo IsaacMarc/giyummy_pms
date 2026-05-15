@@ -433,6 +433,18 @@ Future<void> _generateStockAlerts() async {
     return filename;
   }
 
+
+Future<String?> restoreBackup(String filename) async {
+    try {
+      await _storage.restoreFromBackupFile(filename);
+      await restoreSession(); 
+      await _addAuditLog('RESTORE', 'Maintenance', 'Restored system from backup: $filename');
+      return null; 
+    } catch (e) {
+      return 'Failed to restore backup: $e';
+    }
+  }
+  
 Future<String?> restoreBackupFromPath(String filePath, String filename) async {
     try {
       await _storage.restoreFromAbsolutePath(filePath);

@@ -277,23 +277,23 @@ class MaintenanceScreen extends StatelessWidget {
       ),
     );
 
-    if (confirm == true && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Restoring system data...')));
-          
-          // FIX: Use restoreBackup for the internal SQLite list
-          final error = await provider.restoreBackupFromPath(backup.filename); 
-          
-          if (!context.mounted) return;
+  if (confirm == true && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Restoring system data...')));
+        
+        // FIX: Changed from restoreBackupFromPath to just restoreBackup
+        final error = await provider.restoreBackup(backup.filename); 
+        
+        if (!context.mounted) return;
 
-          if (error == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('System restored successfully!'), backgroundColor: Colors.green),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.red));
-          }
+        if (error == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('System restored successfully!'), backgroundColor: Colors.green),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.red));
         }
-  }
+      }
+    }
 
   void _createBackup(BuildContext context, AppProvider provider) async {
     ScaffoldMessenger.of(context).showSnackBar(

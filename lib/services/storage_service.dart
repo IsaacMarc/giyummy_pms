@@ -144,6 +144,33 @@ class StorageService {
       }
     }
   
+
+  // --- MISSING METHOD: Restores from the internal backups folder ---
+  Future<void> restoreFromBackupFile(String filename) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final file = File(p.join(appDir.path, 'product_management_data', 'backups', filename));
+
+    if (!await file.exists()) throw Exception('Backup file not found on disk.');
+
+    final jsonStr = await file.readAsString();
+    final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+
+    final db = await DatabaseService.instance.database;
+
+    await db.transaction((txn) async {
+      final tables = ['users', 'products', 'sales', 'alerts', 'audit_logs', 'backups'];
+      
+      for (final table in tables) {
+        if (data.containsKey(table)) {
+          await txn.delete(table);
+          final rows = data[table] as List;
+          for (final row in rows) {
+            await txn.insert(table, Map<String, dynamic>.from(row));
+          }
+        }
+      }
+    });
+  }
     // NEW: Reads a JSON file and overwrites the SQLite database
 // NEW: Reads a JSON file from ANY folder on the computer
   Future<void> restoreFromAbsolutePath(String filePath) async {
