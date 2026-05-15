@@ -56,11 +56,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _loading = false;
     });
 
-    if (err == null) {
+   if (err == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Registration successful! Please login.')),
       );
-      Navigator.pop(context);
+      
+      context.read<AppProvider>().navigateTo('login');
     }
   }
   

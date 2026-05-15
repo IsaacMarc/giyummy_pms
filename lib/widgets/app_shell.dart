@@ -45,13 +45,20 @@ class _Sidebar extends StatelessWidget {
       const _NavItem('dashboard', 'Dashboard', Icons.dashboard_outlined),
       const _NavItem('sales', 'Sales', Icons.point_of_sale_outlined),
       const _NavItem('inventory', 'Inventory', Icons.inventory_2_outlined),
-      const _NavItem('reports', 'Reports', Icons.bar_chart_outlined),
+      
+      // 1. Hide Reports from Employees (Only Admin and Manager can see it)
+      if (user?.role == 'Admin' || user?.role == 'Manager')
+        const _NavItem('reports', 'Reports', Icons.bar_chart_outlined),
+        
       const _NavItem('alerts', 'Alerts', Icons.notifications_outlined),
       const _NavItem('profile', 'Profile', Icons.person_outline),
-      const _NavItem('maintenance', 'Maintenance', Icons.build_outlined),
       const _NavItem('help', 'Help', Icons.help_outline),
-      if (user?.role == 'Admin')
+      
+      // 2. Group Maintenance and Users together as Admin-only modules
+      if (user?.role == 'Admin') ...[
+        const _NavItem('maintenance', 'Maintenance', Icons.build_outlined),
         const _NavItem('users', 'Users', Icons.manage_accounts_outlined),
+      ],
     ];
 
     return Container(

@@ -112,33 +112,64 @@ class StorageService {
   // ─── Export Logic for Backups ─────────────────────────────────────
 
   // Gathers data from all SQLite tables and packages it into a map
+  // Gathers data from ALL SQLite tables and packages it into a map
   Future<Map<String, dynamic>> exportAllData() async {
     final db = await DatabaseService.instance.database;
     return {
       'users': await db.query('users'),
       'products': await db.query('products'),
-      // Add 'sales', 'alerts', etc. here once you create those tables
+      'sales': await db.query('sales'),
+      'alerts': await db.query('alerts'),
+      'audit_logs': await db.query('audit_logs'),
+      'backups': await db.query('backups'),
     };
   }
 
+  
+
   // Writes the exported map to a physical JSON file on the computer
   Future<void> saveBackupFile(String filename, Map<String, dynamic> data) async {
-    try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final backupDir = Directory(p.join(appDir.path, 'product_management_data', 'backups'));
-      
-      if (!await backupDir.exists()) {
-        await backupDir.create(recursive: true);
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final backupDir = Directory(p.join(appDir.path, 'product_management_data', 'backups'));
+        
+        if (!await backupDir.exists()) {
+          await backupDir.create(recursive: true);
+        }
+        
+        final file = File(p.join(backupDir.path, filename));
+        await file.writeAsString(jsonEncode(data), flush: true);
+      } catch (e) {
+        print("Error creating backup file: $e");
       }
-      
-      final file = File(p.join(backupDir.path, filename));
-      await file.writeAsString(jsonEncode(data), flush: true);
-      print("Backup successfully created at ${file.path}");
-    } catch (e) {
-      print("Error creating backup file: $e");
     }
-  }
   
+    // NEW: Reads a JSON file and overwrites the SQLite database
+// NEW: Reads a JSON file from ANY folder on the computer
+  Future<void> restoreFromAbsolutePath(String filePath) async {
+    final file = File(filePath);
+
+    if (!await file.exists()) throw Exception('Selected backup file not found.');
+
+    final jsonStr = await file.readAsString();
+    final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+
+    final db = await DatabaseService.instance.database;
+
+    await db.transaction((txn) async {
+      final tables = ['users', 'products', 'sales', 'alerts', 'audit_logs', 'backups'];
+      
+      for (final table in tables) {
+        if (data.containsKey(table)) {
+          await txn.delete(table);
+          final rows = data[table] as List;
+          for (final row in rows) {
+            await txn.insert(table, Map<String, dynamic>.from(row));
+          }
+        }
+      }
+    });
+  }
   // ─── Sales ────────────────────────────────────────────────────────
 
   Future<List<Sale>> getSales() async {

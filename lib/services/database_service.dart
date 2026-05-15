@@ -82,16 +82,6 @@ class DatabaseService {
       )
     ''');
 
-    //Create Backups Table
-    await db.execute('''
-      CREATE TABLE backups (
-        id TEXT PRIMARY KEY,
-        filename TEXT NOT NULL,
-        size INTEGER NOT NULL,
-        timestamp TEXT NOT NULL
-      )
-    ''');
-
 // 3. Create Sales Table
     await db.execute('''
       CREATE TABLE sales (
@@ -117,6 +107,16 @@ class DatabaseService {
         timestamp TEXT NOT NULL,
         productId TEXT,
         read INTEGER NOT NULL DEFAULT 0 -- SQLite uses 1 for true, 0 for false
+      )
+    ''');
+    // Create Backups Table
+    await db.execute('''
+      CREATE TABLE backups (
+        id TEXT PRIMARY KEY,
+        filename TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        timestamp TEXT NOT NULL,
+        type TEXT NOT NULL      -- ADDED THIS LINE
       )
     ''');
   }
