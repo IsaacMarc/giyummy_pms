@@ -26,7 +26,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
   List<Product> _filtered(List<Product> all) {
     var list = all;
     final q = _searchCtrl.text.toLowerCase();
-    if (q.isNotEmpty) list = list.where((p) => p.name.toLowerCase().contains(q)).toList();
+    if (q.isNotEmpty) {
+      list = list.where((p) => 
+        p.name.toLowerCase().contains(q) || 
+        p.barcode.toLowerCase().contains(q)
+      ).toList();
+    }
     if (_categoryFilter != 'All') {
       list = list.where((p) => p.category == _categoryFilter).toList();
     }
@@ -49,14 +54,18 @@ class _InventoryScreenState extends State<InventoryScreen> {
   void _showProductDialog(BuildContext ctx, Product? product) {
     final nameCtrl = TextEditingController(text: product?.name ?? '');
     final categoryCtrl = TextEditingController(text: product?.category ?? '');
-    final priceCtrl =
-        TextEditingController(text: product?.price.toString() ?? '');
-    final stockCtrl =
-        TextEditingController(text: product?.stock.toString() ?? '');
-    final reorderCtrl =
-        TextEditingController(text: product?.reorderLevel.toString() ?? '');
+    final priceCtrl = TextEditingController(text: product?.price.toString() ?? '');
+    final stockCtrl = TextEditingController(text: product?.stock.toString() ?? '');
+    final reorderCtrl = TextEditingController(text: product?.reorderLevel.toString() ?? '');
     final barcodeCtrl = TextEditingController(text: product?.barcode ?? '');
     final descCtrl = TextEditingController(text: product?.description ?? '');
+    
+    // State variables for expiration
+    DateTime? selectedExpDate = product?.expirationDate != null 
+        ? DateTime.parse(product!.expirationDate!) 
+        : null;
+    bool autoDispose = product?.autoDispose ?? false;
+    
     String? err;
 
     showDialog(
@@ -69,12 +78,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (err != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(err!,
-                          style: const TextStyle(color: Colors.red)),
+                      child: Text(err!, style: const TextStyle(color: Colors.red)),
                     ),
                   _field(nameCtrl, 'Product Name'),
                   const SizedBox(height: 12),
@@ -97,6 +106,59 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   ),
                   const SizedBox(height: 12),
                   _field(descCtrl, 'Description', maxLines: 2),
+                  
+                  const SizedBox(height: 20),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  const Text('Expiration & Spoilage', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  
+                  // Expiration Date Picker Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(selectedExpDate == null 
+                          ? 'No Expiration Date' 
+                          : 'Expires: ${DateFormat.yMMMd().format(selectedExpDate!)}'),
+                      TextButton.icon(
+                        icon: const Icon(Icons.calendar_today, size: 18),
+                        label: Text(selectedExpDate == null ? 'Set Date' : 'Change Date'),
+                        onPressed: () async {
+                          final date = await showDatePicker(
+                            context: dialogCtx,
+                            initialDate: selectedExpDate ?? DateTime.now().add(const Duration(days: 30)),
+                            firstDate: DateTime.now().subtract(const Duration(days: 365)), 
+                            lastDate: DateTime.now().add(const Duration(days: 3650)),
+                          );
+                          if (date != null) {
+                            setDialogState(() => selectedExpDate = date);
+                          }
+                        },
+                      )
+                    ],
+                  ),
+                  
+                  // Auto-Dispose Toggle
+                  SwitchListTile(
+                    title: const Text('Auto-Dump Expired Stock', style: TextStyle(fontSize: 14)),
+                    subtitle: const Text('Automatically sets stock to 0 when date passes', style: TextStyle(fontSize: 12)),
+                    value: autoDispose,
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: selectedExpDate == null 
+                        ? null // Disable if no date is set
+                        : (val) => setDialogState(() => autoDispose = val),
+                  ),
+                  if (selectedExpDate != null)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => setDialogState(() {
+                          selectedExpDate = null;
+                          autoDispose = false;
+                        }),
+                        child: const Text('Clear Date', style: TextStyle(color: Colors.red)),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -118,11 +180,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   return;
                 }
                 if (price == null || stock == null || reorder == null) {
-                  setDialogState(
-                      () => err = 'Price, stock, reorder must be numbers');
+                  setDialogState(() => err = 'Price, stock, reorder must be numbers');
                   return;
                 }
+                
                 final now = DateTime.now().toIso8601String();
+                
                 if (product == null) {
                   ctx.read<AppProvider>().addProduct(Product(
                         id: _uuid.v4(),
@@ -135,6 +198,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         updatedAt: now,
                         barcode: barcodeCtrl.text.trim(),
                         description: descCtrl.text.trim(),
+                        expirationDate: selectedExpDate?.toIso8601String(),
+                        autoDispose: autoDispose,
                       ));
                 } else {
                   product.name = name;
@@ -145,6 +210,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   product.barcode = barcodeCtrl.text.trim();
                   product.description = descCtrl.text.trim();
                   product.updatedAt = now;
+                  product.expirationDate = selectedExpDate?.toIso8601String();
+                  product.autoDispose = autoDispose;
                   ctx.read<AppProvider>().updateProduct(product);
                 }
                 Navigator.pop(dialogCtx);
@@ -162,21 +229,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
       context: ctx,
       builder: (_) => AlertDialog(
         title: const Text('Delete Product'),
-        content: Text(
-            'Are you sure you want to delete "${product.name}"? This cannot be undone.'),
+        content: Text('Are you sure you want to delete "${product.name}"? This cannot be undone.'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               ctx.read<AppProvider>().deleteProduct(product.id);
               Navigator.pop(ctx);
             },
-            style:
-                ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete',
-                style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -201,21 +263,18 @@ class _InventoryScreenState extends State<InventoryScreen> {
             children: [
               Row(
                 children: [
-                  const Text('Products',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 18)),
+                  const Text('Products', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                   const Spacer(),
                   SizedBox(
                     width: 220,
                     child: TextField(
                       controller: _searchCtrl,
                       decoration: const InputDecoration(
-                        hintText: 'Search products...',
+                        hintText: 'Search products/barcode...',
                         prefixIcon: Icon(Icons.search, size: 18),
                         border: OutlineInputBorder(),
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(
-                            vertical: 8, horizontal: 12),
+                        contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
@@ -223,12 +282,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   const SizedBox(width: 12),
                   DropdownButton<String>(
                     value: _categoryFilter,
-                    items: categories
-                        .map((c) =>
-                            DropdownMenuItem(value: c, child: Text(c)))
-                        .toList(),
-                    onChanged: (v) =>
-                        setState(() => _categoryFilter = v ?? 'All'),
+                    items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                    onChanged: (v) => setState(() => _categoryFilter = v ?? 'All'),
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton.icon(
@@ -247,35 +302,45 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: DataTable(
-                      headingRowColor: WidgetStateProperty.all(
-                          Colors.grey[50]),
+                      headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
                       columns: const [
                         DataColumn(label: Text('Name')),
                         DataColumn(label: Text('Category')),
+                        DataColumn(label: Text('Barcode')),    // Added Barcode Column
                         DataColumn(label: Text('Price')),
                         DataColumn(label: Text('Stock')),
                         DataColumn(label: Text('Reorder')),
+                        DataColumn(label: Text('Expiration')), // Added Expiration Column
                         DataColumn(label: Text('Status')),
                         DataColumn(label: Text('Actions')),
                       ],
                       rows: filtered.map((p) {
                         final status = p.status;
-                        final statusColor = status == 'Out of Stock'
+                        final statusColor = status == 'Out of Stock' || status == 'Expired'
                             ? Colors.red
                             : status == 'Low Stock'
                                 ? Colors.orange
                                 : Colors.green;
                         return DataRow(cells: [
-                          DataCell(Text(p.name,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w600))),
+                          DataCell(Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600))),
                           DataCell(Text(p.category)),
+                          // Barcode Cell
+                          DataCell(Text(p.barcode.isEmpty ? 'N/A' : p.barcode, style: const TextStyle(fontFamily: 'monospace'))),
                           DataCell(Text(fmt.format(p.price))),
                           DataCell(Text('${p.stock}')),
                           DataCell(Text('${p.reorderLevel}')),
+                          // Expiration Date Cell
+                          DataCell(Text(
+                            p.expirationDate != null 
+                                ? DateFormat.yMMMd().format(DateTime.parse(p.expirationDate!)) 
+                                : 'N/A',
+                            style: TextStyle(
+                              color: p.status == 'Expired' ? Colors.red : Colors.black87,
+                              fontWeight: p.status == 'Expired' ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          )),
                           DataCell(Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
                               color: statusColor.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(4),
@@ -290,17 +355,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.edit_outlined,
-                                    color: Colors.blue, size: 18),
-                                onPressed: () =>
-                                    _showEditDialog(context, p),
+                                icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 18),
+                                onPressed: () => _showEditDialog(context, p),
                                 tooltip: 'Edit',
                               ),
                               IconButton(
-                                icon: const Icon(Icons.delete_outline,
-                                    color: Colors.red, size: 18),
-                                onPressed: () =>
-                                    _deleteProduct(context, p),
+                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                                onPressed: () => _deleteProduct(context, p),
                                 tooltip: 'Delete',
                               ),
                             ],
@@ -313,10 +374,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                    '${filtered.length} of ${products.length} products',
-                    style:
-                        TextStyle(color: Colors.grey[500], fontSize: 13)),
+                child: Text('${filtered.length} of ${products.length} products',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 13)),
               ),
             ],
           ),
@@ -325,8 +384,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  Widget _field(TextEditingController ctrl, String label,
-      {int maxLines = 1}) {
+  Widget _field(TextEditingController ctrl, String label, {int maxLines = 1}) {
     return TextField(
       controller: ctrl,
       maxLines: maxLines,
