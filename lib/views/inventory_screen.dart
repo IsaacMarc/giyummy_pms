@@ -255,6 +255,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Card(
+        color: Colors.white,
         elevation: 2,
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -264,27 +265,32 @@ class _InventoryScreenState extends State<InventoryScreen> {
               Row(
                 children: [
                   const Text('Products', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                  const Spacer(),
-                  SizedBox(
-                    width: 220,
+                  const SizedBox(width: 12),
+                    SizedBox(
+                    width: 400,
                     child: TextField(
+
                       controller: _searchCtrl,
-                      decoration: const InputDecoration(
-                        hintText: 'Search products/barcode...',
-                        prefixIcon: Icon(Icons.search, size: 18),
-                        border: OutlineInputBorder(),
+                      decoration:  InputDecoration(
+                        filled: true,
+                        fillColor: Colors.grey[200],
+                        hintText: 'Search products/barcode',
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        border: const OutlineInputBorder(),
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  DropdownButton<String>(
+                  const Spacer(),
+                  SizedBox(width: 250, child: DropdownButton<String>(
+                    menuWidth: 250,
                     value: _categoryFilter,
                     items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                     onChanged: (v) => setState(() => _categoryFilter = v ?? 'All'),
-                  ),
+                  ),),
+                 
                   const SizedBox(width: 12),
                   ElevatedButton.icon(
                     onPressed: () => _showAddDialog(context),
@@ -301,73 +307,76 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 child: SingleChildScrollView(
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
-                      columns: const [
-                        DataColumn(label: Text('Name')),
-                        DataColumn(label: Text('Category')),
-                        DataColumn(label: Text('Barcode')),    // Added Barcode Column
-                        DataColumn(label: Text('Price')),
-                        DataColumn(label: Text('Stock')),
-                        DataColumn(label: Text('Reorder')),
-                        DataColumn(label: Text('Expiration')), // Added Expiration Column
-                        DataColumn(label: Text('Status')),
-                        DataColumn(label: Text('Actions')),
-                      ],
-                      rows: filtered.map((p) {
-                        final status = p.status;
-                        final statusColor = status == 'Out of Stock' || status == 'Expired'
-                            ? Colors.red
-                            : status == 'Low Stock'
-                                ? Colors.orange
-                                : Colors.green;
-                        return DataRow(cells: [
-                          DataCell(Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                          DataCell(Text(p.category)),
-                          // Barcode Cell
-                          DataCell(Text(p.barcode.isEmpty ? 'N/A' : p.barcode, style: const TextStyle(fontFamily: 'monospace'))),
-                          DataCell(Text(fmt.format(p.price))),
-                          DataCell(Text('${p.stock}')),
-                          DataCell(Text('${p.reorderLevel}')),
-                          // Expiration Date Cell
-                          DataCell(Text(
-                            p.expirationDate != null 
-                                ? DateFormat.yMMMd().format(DateTime.parse(p.expirationDate!)) 
-                                : 'N/A',
-                            style: TextStyle(
-                              color: p.status == 'Expired' ? Colors.red : Colors.black87,
-                              fontWeight: p.status == 'Expired' ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          )),
-                          DataCell(Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: statusColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(status,
-                                style: TextStyle(
-                                    color: statusColor,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600)),
-                          )),
-                          DataCell(Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 18),
-                                onPressed: () => _showEditDialog(context, p),
-                                tooltip: 'Edit',
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                      child: DataTable(
+                        headingRowColor: WidgetStateProperty.all(const Color(0xFF1E293B)),
+                        columns: const [
+                          DataColumn(label: Text('Name', style:TextStyle(color: Colors.white))),
+                          DataColumn(label: Text('Category', style:TextStyle(color: Colors.white))),
+                          DataColumn(label: Text('Barcode', style:TextStyle(color: Colors.white))),    // Added Barcode Column
+                          DataColumn(label: Text('Price', style:TextStyle(color: Colors.white))),
+                          DataColumn(label: Text('Stock', style:TextStyle(color: Colors.white))),
+                          DataColumn(label: Text('Reorder', style:TextStyle(color: Colors.white))),
+                          DataColumn(label: Text('Expiration', style:TextStyle(color: Colors.white))), // Added Expiration Column
+                          DataColumn(label: Text('Status', style:TextStyle(color: Colors.white))),
+                          DataColumn(label: Text('Actions', style:TextStyle(color: Colors.white))),
+                        ],
+                        rows: filtered.map((p) {
+                          final status = p.status;
+                          final statusColor = status == 'Out of Stock' || status == 'Expired'
+                              ? Colors.red
+                              : status == 'Low Stock'
+                                  ? Colors.orange
+                                  : Colors.green;
+                          return DataRow(cells: [
+                            DataCell(Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600))),
+                            DataCell(Text(p.category)),
+                            // Barcode Cell
+                            DataCell(Text(p.barcode.isEmpty ? 'N/A' : p.barcode, style: const TextStyle(fontFamily: 'monospace'))),
+                            DataCell(Text(fmt.format(p.price))),
+                            DataCell(Text('${p.stock}')),
+                            DataCell(Text('${p.reorderLevel}')),
+                            // Expiration Date Cell
+                            DataCell(Text(
+                              p.expirationDate != null 
+                                  ? DateFormat.yMMMd().format(DateTime.parse(p.expirationDate!)) 
+                                  : 'N/A',
+                              style: TextStyle(
+                                color: p.status == 'Expired' ? Colors.red : Colors.black87,
+                                fontWeight: p.status == 'Expired' ? FontWeight.bold : FontWeight.normal,
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
-                                onPressed: () => _deleteProduct(context, p),
-                                tooltip: 'Delete',
+                            )),
+                            DataCell(Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
                               ),
-                            ],
-                          )),
-                        ]);
-                      }).toList(),
+                              child: Text(status,
+                                  style: TextStyle(
+                                      color: statusColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600)),
+                            )),
+                            DataCell(Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 18),
+                                  onPressed: () => _showEditDialog(context, p),
+                                  tooltip: 'Edit',
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                                  onPressed: () => _deleteProduct(context, p),
+                                  tooltip: 'Delete',
+                                ),
+                              ],
+                            )),
+                          ]);
+                        }).toList(),
+                      ),
                     ),
                   ),
                 ),
@@ -375,7 +384,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text('${filtered.length} of ${products.length} products',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                    style: const TextStyle(color: Color.fromARGB(255, 67, 67, 67), fontSize: 13)),
               ),
             ],
           ),

@@ -110,6 +110,7 @@ class ReportsScreen extends StatelessWidget {
               Expanded(
                 flex: 3,
                 child: Card(
+                  color: Colors.white,
                   elevation: 2,
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -205,6 +206,7 @@ class ReportsScreen extends StatelessWidget {
               Expanded(
                 flex: 2,
                 child: Card(
+                  color: Colors.white,
                   elevation: 2,
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -227,8 +229,9 @@ class ReportsScreen extends StatelessWidget {
                             },
                             children: [
                               TableRow(
-                                decoration: BoxDecoration(
-                                    color: Colors.grey[50]),
+                                decoration: const BoxDecoration(
+                                    borderRadius: BorderRadius.all(Radius.circular(8)),
+                                    color: Color.fromARGB(255, 231, 231, 231)),
                                 children: [
                                   _tableHeader('Product'),
                                   _tableHeader('Qty'),
