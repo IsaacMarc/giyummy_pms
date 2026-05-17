@@ -1,5 +1,5 @@
 import 'dart:convert';
-
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:product_management/models/models.dart';
@@ -14,6 +14,7 @@ class AppProvider extends ChangeNotifier {
   User? _currentUser;
   String _currentPage = 'dashboard';
   bool isInitialized = false;
+  Timer? _backgroundMonitor;
 
   // ── IN-MEMORY CACHES (Lightning fast UI reads) ─────────────────────────────
   List<User> _users = [];
@@ -51,6 +52,11 @@ Future<void> restoreSession() async {
 
     isInitialized = true;
     notifyListeners();
+
+    _backgroundMonitor?.cancel();
+    _backgroundMonitor = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (isLoggedIn) _generateStockAlerts();
+    });
   }
 
   Future<String?> login(String username, String password) async {
@@ -121,23 +127,29 @@ Future<void> restoreSession() async {
   List<Product> getProducts() => _products; // Instant synchronous read
 
   Future<void> addProduct(Product product) async {
-    _products.add(product);
-    notifyListeners(); // Instant UI update
-    
-    await _storage.saveProduct(product);
-    await _addAuditLog('CREATE', 'Inventory', 'Added product: ${product.name}');
-  }
-
-  Future<void> updateProduct(Product updated) async {
-    final idx = _products.indexWhere((p) => p.id == updated.id);
-    if (idx >= 0) {
-      _products[idx] = updated;
-      notifyListeners(); 
+      _products.add(product);
+      notifyListeners(); // Instant UI update
       
-      await _storage.saveProduct(updated);
-      await _addAuditLog('UPDATE', 'Inventory', 'Updated product: ${updated.name}');
+      await _storage.saveProduct(product);
+      await _addAuditLog('CREATE', 'Inventory', 'Added product: ${product.name}');
+      
+      // NEW: Instantly check for low stock or expiration when adding a new item
+      await _generateStockAlerts(); 
     }
-  }
+
+    Future<void> updateProduct(Product updated) async {
+      final idx = _products.indexWhere((p) => p.id == updated.id);
+      if (idx >= 0) {
+        _products[idx] = updated;
+        notifyListeners(); 
+        
+        await _storage.saveProduct(updated);
+        await _addAuditLog('UPDATE', 'Inventory', 'Updated product: ${updated.name}');
+        
+        // NEW: Instantly update alerts if a manager manually changes the stock number or date
+        await _generateStockAlerts(); 
+      }
+    }
 
   Future<void> deleteProduct(String productId) async {
     final product = _products.firstWhere((p) => p.id == productId);
@@ -248,68 +260,47 @@ Future<void> restoreSession() async {
   }
 
 Future<void> _generateStockAlerts() async {
-    // 1. Run the auto-dump check first
     await _processExpirations();
 
-    final existingProductAlerts = _alerts.map((a) => a.productId).toSet();
+    // REMOVED the old existingProductAlerts check that was blocking escalations
 
     for (final product in _products) {
-      if (existingProductAlerts.contains(product.id)) continue;
-      
       Alert? newAlert;
       
-      // -- NEW EXPIRATION ALERT LOGIC --
+      // -- EXPIRATION ALERT LOGIC --
       if (product.expirationDate != null && product.stock > 0) {
         final expDate = DateTime.parse(product.expirationDate!);
         final daysUntilExp = expDate.difference(DateTime.now()).inDays;
 
         if (daysUntilExp < 0) {
-          newAlert = Alert(
-            id: _uuid.v4(),
-            type: 'expired',
-            severity: 'critical',
-            message: 'EXPIRED: ${product.name} passed its expiration date. Please remove from shelves.',
-            timestamp: DateTime.now().toIso8601String(),
-            productId: product.id,
-          );
+          newAlert = Alert(id: _uuid.v4(), type: 'expired', severity: 'critical', message: 'EXPIRED: ${product.name} passed its expiration date. Please remove from shelves.', timestamp: DateTime.now().toIso8601String(), productId: product.id);
         } else if (daysUntilExp <= 7) {
-          newAlert = Alert(
-            id: _uuid.v4(),
-            type: 'expiring-soon',
-            severity: 'warning',
-            message: 'EXPIRING SOON: ${product.name} expires in $daysUntilExp days.',
-            timestamp: DateTime.now().toIso8601String(),
-            productId: product.id,
-          );
+          newAlert = Alert(id: _uuid.v4(), type: 'expiring-soon', severity: 'warning', message: 'EXPIRING SOON: ${product.name} expires in $daysUntilExp days.', timestamp: DateTime.now().toIso8601String(), productId: product.id);
         }
       }
 
-      // -- EXISTING STOCK ALERT LOGIC --
+      // -- STOCK ALERT LOGIC --
       if (newAlert == null) {
         if (product.stock == 0) {
-          newAlert = Alert(
-            id: _uuid.v4(),
-            type: 'low-stock',
-            severity: 'critical',
-            message: 'OUT OF STOCK: ${product.name} has no stock remaining.',
-            timestamp: DateTime.now().toIso8601String(),
-            productId: product.id,
-          );
+          newAlert = Alert(id: _uuid.v4(), type: 'low-stock', severity: 'critical', message: 'OUT OF STOCK: ${product.name} has no stock remaining.', timestamp: DateTime.now().toIso8601String(), productId: product.id);
         } else if (product.stock <= product.reorderLevel) {
-          newAlert = Alert(
-            id: _uuid.v4(),
-            type: 'low-stock',
-            severity: 'warning',
-            message: 'LOW STOCK: ${product.name} has ${product.stock} units remaining.',
-            timestamp: DateTime.now().toIso8601String(),
-            productId: product.id,
-          );
+          newAlert = Alert(id: _uuid.v4(), type: 'low-stock', severity: 'warning', message: 'LOW STOCK: ${product.name} has ${product.stock} units remaining.', timestamp: DateTime.now().toIso8601String(), productId: product.id);
         }
       }
 
+      // -- NEW: SMART ALERT INJECTION --
       if (newAlert != null) {
-        _alerts.add(newAlert);
-        await _storage.saveAlert(newAlert);
+        // Only save the alert if this EXACT message isn't already sitting unread in the inbox
+        bool alreadyActive = _alerts.any((a) => 
+            a.productId == product.id && 
+            a.message == newAlert!.message && 
+            !a.read
+        );
+
+        if (!alreadyActive) {
+          _alerts.add(newAlert);
+          await _storage.saveAlert(newAlert);
+        }
       }
     }
     notifyListeners();

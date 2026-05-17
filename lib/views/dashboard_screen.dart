@@ -26,9 +26,10 @@ class DashboardScreen extends StatelessWidget {
     final lowStock =
         products.where((p) => p.stock > 0 && p.stock <= p.reorderLevel).toList();
     final outOfStock = products.where((p) => p.stock == 0).toList();
-    final unreadAlerts = alerts.where((a) => !a.read).length;
 
     final fmt = NumberFormat.currency(symbol: '\$');
+    // This accurately catches Low Stock, Out of Stock, AND Expired items!
+    final activeAlertCount = products.where((p) => p.status != 'In Stock').length;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -67,7 +68,7 @@ class DashboardScreen extends StatelessWidget {
               ),
               StatCard(
                 title: 'Active Alerts',
-                value: '$unreadAlerts',
+                value: '$activeAlertCount',
                 icon: Icons.notifications_active_outlined,
                 color: Colors.red,
                 background_icon_color: const Color.fromARGB(255, 255, 185, 180),

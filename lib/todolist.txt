@@ -1,6 +1,6 @@
 TO DO LIST / PROBLEMS:
-- Lowstock alert in dashboard is not reflecting expired products
-- Sales module select product does not include item quantity
+- Lowstock alert in dashboard is not reflecting expired products (done)
+- Sales module select product does not include item quantity (done)
 - There is no reciept message after completing Sales
 - When product is now expired, feature of stock will automatically convert to 0 is not working
 - 

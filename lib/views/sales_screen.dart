@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
@@ -15,12 +16,15 @@ class _SalesScreenState extends State<SalesScreen> {
   final List<SaleItem> _cart = [];
   final _barcodeCtrl = TextEditingController();
   final _discountCtrl = TextEditingController(text: '0');
+  
+  // 1. ADDED: Controller for the new quantity field
+  final _qtyCtrl = TextEditingController(text: '1'); 
+  
   String _paymentMethod = 'Cash';
   String? _selectedProductId;
   String? _error;
   String? _success;
   
-  // 1. ADDED: Missing boolean for the loading state
   bool _isProcessing = false; 
 
   static const _paymentMethods = ['Cash', 'Card', 'Mobile Payment'];
@@ -29,6 +33,7 @@ class _SalesScreenState extends State<SalesScreen> {
   void dispose() {
     _barcodeCtrl.dispose();
     _discountCtrl.dispose();
+    _qtyCtrl.dispose(); // Dispose the new controller
     super.dispose();
   }
 
@@ -39,33 +44,69 @@ class _SalesScreenState extends State<SalesScreen> {
 
   void _addToCart(List<Product> products) {
     if (_selectedProductId == null) return;
+    
+    // 2. ADDED: Parse the quantity from the text field
+    final qty = int.tryParse(_qtyCtrl.text) ?? 1;
+    if (qty <= 0) {
+      setState(() => _error = 'Quantity must be at least 1');
+      return;
+    }
+
     final product = products.firstWhere((p) => p.id == _selectedProductId, orElse: () => products.first);
-    _addProductToCart(product);
+    _addProductToCart(product, qty);
+    
+    // Reset quantity back to 1 after adding
+    _qtyCtrl.text = '1';
   }
 
-  void _addProductToCart(Product product) {
+  void _scanBarcode(List<Product> products) {
+    final barcode = _barcodeCtrl.text.trim();
+    if (barcode.isEmpty) return;
+    
+    // When scanning, default to 1, or use the typed quantity if they set it first
+    final qty = int.tryParse(_qtyCtrl.text) ?? 1; 
+
+    try {
+      final product = products.firstWhere((p) => p.barcode == barcode);
+      _addProductToCart(product, qty);
+      _barcodeCtrl.clear();
+      _qtyCtrl.text = '1'; // Reset quantity back to 1
+    } catch (_) {
+      setState(() => _error = 'Product with barcode "$barcode" not found');
+      _barcodeCtrl.clear();
+    }
+  }
+
+  // 3. UPDATED: Accepts the qty amount and checks stock appropriately
+  void _addProductToCart(Product product, int qtyToAdd) {
     if (product.stock == 0) {
       setState(() => _error = '${product.name} is out of stock');
       return;
     }
+    
     final idx = _cart.indexWhere((i) => i.productId == product.id);
+    
     if (idx >= 0) {
       final currentQty = _cart[idx].quantity;
-      if (currentQty >= product.stock) {
+      if (currentQty + qtyToAdd > product.stock) {
         setState(() => _error = 'Cannot exceed available stock (${product.stock})');
         return;
       }
       setState(() {
-        _cart[idx].quantity++;
+        _cart[idx].quantity += qtyToAdd;
         _error = null;
         _success = null;
       });
     } else {
+      if (qtyToAdd > product.stock) {
+        setState(() => _error = 'Cannot exceed available stock (${product.stock})');
+        return;
+      }
       setState(() {
         _cart.add(SaleItem(
           productId: product.id,
           productName: product.name,
-          quantity: 1,
+          quantity: qtyToAdd,
           price: product.price,
         ));
         _error = null;
@@ -74,24 +115,10 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  void _scanBarcode(List<Product> products) {
-    final barcode = _barcodeCtrl.text.trim();
-    if (barcode.isEmpty) return;
-    try {
-      final product = products.firstWhere((p) => p.barcode == barcode);
-      _addProductToCart(product);
-      _barcodeCtrl.clear();
-    } catch (_) {
-      setState(() => _error = 'Product with barcode "$barcode" not found');
-      _barcodeCtrl.clear();
-    }
-  }
-
   void _removeFromCart(int index) {
     setState(() => _cart.removeAt(index));
   }
 
-  // 2. ADDED: 'async' keyword
   void _completeSale() async {
     if (_cart.isEmpty) {
       setState(() => _error = 'Cart is empty');
@@ -104,7 +131,6 @@ class _SalesScreenState extends State<SalesScreen> {
       _success = null;
     });
 
-    // 3. FIXED: Changed _discount to _discountPct
     final err = await context.read<AppProvider>().addSale(
           _cart,
           _discountPct, 
@@ -116,23 +142,18 @@ class _SalesScreenState extends State<SalesScreen> {
     setState(() => _isProcessing = false);
 
     if (err != null) {
-      // 4. FIXED: Display provider error on the UI safely
       setState(() => _error = err);
       return;
     }
     
-    // 5. FIXED: Clear the cart and reset values on a successful sale!
     setState(() {
       _cart.clear();
       _discountCtrl.text = '0';
       _barcodeCtrl.clear();
+      _qtyCtrl.text = '1';
       _success = 'Sale completed successfully!';
     });
   }
-
-  // ==========================================
-  // KEEP YOUR @override Widget build(...) BELOW 
-  // ==========================================
 
   @override
   Widget build(BuildContext context) {
@@ -231,10 +252,12 @@ class _SalesScreenState extends State<SalesScreen> {
                         const SizedBox(height: 12),
                         const Divider(),
                         const SizedBox(height: 12),
-                        // Dropdown
+                        
+                        // 4. UPDATED: Dropdown, Quantity Field, and Add Button
                         Row(
                           children: [
                             Expanded(
+                              flex: 3,
                               child: DropdownButtonFormField<String>(
                                 initialValue: _selectedProductId,
                                 decoration: const InputDecoration(
@@ -254,7 +277,22 @@ class _SalesScreenState extends State<SalesScreen> {
                                     setState(() => _selectedProductId = v),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 12),
+                            // New Quantity TextField
+                            SizedBox(
+                              width: 80,
+                              child: TextField(
+                                controller: _qtyCtrl,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: const InputDecoration(
+                                  labelText: 'Qty',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
                             ElevatedButton.icon(
                               onPressed: () => _addToCart(products),
                               icon: const Icon(Icons.add_shopping_cart),
@@ -270,7 +308,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 // Cart
                 Expanded(
                   child: Card(
-                    color:Colors.white,
+                    color: Colors.white,
                     elevation: 2,
                     child: Padding(
                       padding: const EdgeInsets.all(20),
@@ -414,10 +452,12 @@ class _SalesScreenState extends State<SalesScreen> {
                     SizedBox(
                       height: 48,
                       child: ElevatedButton.icon(
-                        onPressed: _completeSale,
-                        icon: const Icon(Icons.check_circle_outline),
-                        label: const Text('Complete Sale',
-                            style: TextStyle(
+                        onPressed: _isProcessing ? null : _completeSale,
+                        icon: _isProcessing 
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+                            : const Icon(Icons.check_circle_outline),
+                        label: Text(_isProcessing ? 'Processing...' : 'Complete Sale',
+                            style: const TextStyle(
                                 fontSize: 15, fontWeight: FontWeight.w600)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green[700],
