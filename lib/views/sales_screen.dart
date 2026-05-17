@@ -194,6 +194,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         style: TextStyle(color: Colors.green[700])),
                   ),
                 Card(
+                  color: Colors.white,
                   elevation: 2,
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -269,6 +270,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 // Cart
                 Expanded(
                   child: Card(
+                    color:Colors.white,
                     elevation: 2,
                     child: Padding(
                       padding: const EdgeInsets.all(20),
@@ -342,6 +344,7 @@ class _SalesScreenState extends State<SalesScreen> {
           SizedBox(
             width: 280,
             child: Card(
+              color: Colors.white,
               elevation: 2,
               child: Padding(
                 padding: const EdgeInsets.all(20),

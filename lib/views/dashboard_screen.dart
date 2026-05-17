@@ -84,7 +84,7 @@ class DashboardScreen extends StatelessWidget {
                   elevation: 2,
                   color: Colors.white,
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.only(top:20,right:20,left:20,bottom: 20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -98,6 +98,12 @@ class DashboardScreen extends StatelessWidget {
                                     fontWeight: FontWeight.bold, fontSize: 16)),
                           ],
                         ),
+                        const SizedBox(height: 8),
+                        const Divider(
+                                height: 8,      // The total space occupied by the divider
+                                thickness: 2,    // The actual thickness of the line  // Empty space to the right
+                                color: Colors.grey,
+                              ),
                         const SizedBox(height: 16),
                         if (lowStock.isEmpty && outOfStock.isEmpty)
                           Text('All products are well stocked!',
@@ -244,6 +250,7 @@ class DashboardScreen extends StatelessWidget {
   Widget _summaryCard(
       String title, String value, IconData icon, MaterialColor color) {
     return Card(
+      color: Colors.white,
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16),
