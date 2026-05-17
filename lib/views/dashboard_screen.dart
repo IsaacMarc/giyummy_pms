@@ -13,7 +13,6 @@ class DashboardScreen extends StatelessWidget {
     final provider = context.watch<AppProvider>();
     final products = provider.getProducts();
     final sales = provider.getSales();
-    final alerts = provider.getAlerts();
 
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final todaySales = sales

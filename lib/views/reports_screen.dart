@@ -1,284 +1,392 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:csv/csv.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:fl_chart/fl_chart.dart'; // NEW: Imported the charting library
 import '../providers/app_provider.dart';
-import '../widgets/stat_card.dart';
+import '../models/models.dart';
 
-class ReportsScreen extends StatelessWidget {
+class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final sales = context
-        .watch<AppProvider>()
-        .getSales()
-        .where((s) => s.status == 'completed')
-        .toList();
+  State<ReportsScreen> createState() => _ReportsScreenState();
+}
 
-    final fmt = NumberFormat.currency(symbol: '\$');
-    final totalRevenue = sales.fold(0.0, (sum, s) => sum + s.finalTotal);
-    final avgSale = sales.isEmpty ? 0.0 : totalRevenue / sales.length;
-    final totalItems =
-        sales.fold(0, (sum, s) => sum + s.items.fold(0, (a, i) => a + i.quantity));
+class _ReportsScreenState extends State<ReportsScreen> {
+  String _reportType = 'Top Products';
+  String _timeFilter = 'Last 7 Days';
+  
+  final List<String> _reportTypes = ['Sales Trend', 'Top Products', 'Categories', 'Low Performers'];
+  final List<String> _timeFilters = ['Today', 'Last 7 Days', 'Last 30 Days'];
 
-    // Last 7 days trend
+  List<Sale> _getFilteredSales(List<Sale> allSales) {
     final now = DateTime.now();
-    final days = List.generate(7, (i) {
-      final d = now.subtract(Duration(days: 6 - i));
-      return DateFormat('yyyy-MM-dd').format(d);
-    });
-    final dailyRevenue = {for (final d in days) d: 0.0};
-    for (final s in sales) {
-      final day = s.timestamp.substring(0, 10);
-      if (dailyRevenue.containsKey(day)) {
-        dailyRevenue[day] = (dailyRevenue[day] ?? 0) + s.finalTotal;
-      }
+    DateTime startDate;
+
+    if (_timeFilter == 'Today') {
+      startDate = DateTime(now.year, now.month, now.day);
+    } else if (_timeFilter == 'Last 7 Days') {
+      startDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7));
+    } else {
+      startDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 30));
     }
 
-    // Top products
-    final productRevenue = <String, Map<String, dynamic>>{};
-    for (final s in sales) {
-      for (final item in s.items) {
-        productRevenue.putIfAbsent(item.productId, () => {
-              'name': item.productName,
-              'qty': 0,
-              'revenue': 0.0,
-            });
-        productRevenue[item.productId]!['qty'] =
-            (productRevenue[item.productId]!['qty'] as int) + item.quantity;
-        productRevenue[item.productId]!['revenue'] =
-            (productRevenue[item.productId]!['revenue'] as double) +
-                item.subtotal;
+    return allSales.where((s) {
+      final saleDate = DateTime.parse(s.timestamp);
+      return saleDate.isAfter(startDate) || saleDate.isAtSameMomentAs(startDate);
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _generateReportData(List<Sale> sales, List<Product> products) {
+    final data = <Map<String, dynamic>>[];
+
+    if (_reportType == 'Sales Trend') {
+      final grouped = <String, double>{};
+      for (var s in sales) {
+        final date = s.timestamp.substring(0, 10);
+        grouped[date] = (grouped[date] ?? 0) + s.finalTotal;
+      }
+      var sortedKeys = grouped.keys.toList()..sort();
+      for (var key in sortedKeys) {
+        data.add({'Date': key, 'Revenue': grouped[key]});
+      }
+
+    } else if (_reportType == 'Top Products' || _reportType == 'Low Performers') {
+      final qtyMap = <String, int>{};
+      final revMap = <String, double>{};
+      
+      for (var p in products) {
+        qtyMap[p.id] = 0;
+        revMap[p.id] = 0.0;
+      }
+
+      for (var s in sales) {
+        for (var i in s.items) {
+          qtyMap[i.productId] = (qtyMap[i.productId] ?? 0) + i.quantity;
+          revMap[i.productId] = (revMap[i.productId] ?? 0) + i.subtotal;
+        }
+      }
+
+      for (var p in products) {
+        data.add({
+          'Product': p.name,
+          'Quantity Sold': qtyMap[p.id],
+          'Revenue': revMap[p.id],
+        });
+      }
+
+      if (_reportType == 'Top Products') {
+        data.sort((a, b) => (b['Quantity Sold'] as int).compareTo(a['Quantity Sold'] as int));
+      } else {
+        data.sort((a, b) => (a['Quantity Sold'] as int).compareTo(b['Quantity Sold'] as int));
+      }
+      if (data.length > 20) data.removeRange(20, data.length);
+
+    } else if (_reportType == 'Categories') {
+      final catRev = <String, double>{};
+      final catQty = <String, int>{};
+
+      for (var s in sales) {
+        for (var i in s.items) {
+          final prod = products.firstWhere((p) => p.id == i.productId, orElse: () => products.first);
+          final cat = prod.category;
+          catQty[cat] = (catQty[cat] ?? 0) + i.quantity;
+          catRev[cat] = (catRev[cat] ?? 0) + i.subtotal;
+        }
+      }
+
+      for (var cat in catRev.keys) {
+        data.add({
+          'Category': cat,
+          'Quantity Sold': catQty[cat],
+          'Revenue': catRev[cat],
+        });
+      }
+      data.sort((a, b) => (b['Revenue'] as double).compareTo(a['Revenue'] as double));
+    }
+    return data;
+  }
+
+  Future<void> _exportToCSV(List<Map<String, dynamic>> reportData) async {
+    if (reportData.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No data to export.')));
+      return;
+    }
+    List<List<dynamic>> csvRows = [];
+    csvRows.add(reportData.first.keys.toList());
+    for (var row in reportData) {
+      csvRows.add(row.values.toList());
+    }
+    String csvString = const ListToCsvConverter().convert(csvRows);
+    String? outputFile = await FilePicker.saveFile( // <-- Removed .platform here
+      dialogTitle: 'Save Report as CSV',
+      fileName: '${_reportType.replaceAll(' ', '_')}_$_timeFilter.csv',
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+    if (outputFile != null) {
+      try {
+        final file = File(outputFile);
+        await file.writeAsString(csvString);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Report exported to $outputFile'), backgroundColor: Colors.green),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save file: $e'), backgroundColor: Colors.red),
+        );
       }
     }
-    final topProducts = productRevenue.values.toList()
-      ..sort((a, b) =>
-          (b['revenue'] as double).compareTo(a['revenue'] as double));
+  }
 
-    final maxRevenue =
-        dailyRevenue.values.fold(0.0, (m, v) => v > m ? v : m);
+  // --- NEW: Dynamic Chart Generator ---
+  Widget _buildChart(List<Map<String, dynamic>> data) {
+    if (data.isEmpty || (data.every((e) => e['Revenue'] == 0 && e['Quantity Sold'] == 0))) {
+      return Center(child: Text('Not enough data to display chart', style: TextStyle(color: Colors.grey[400])));
+    }
 
-    return SingleChildScrollView(
+    if (_reportType == 'Sales Trend') {
+      return LineChart(
+        LineChartData(
+          gridData: const FlGridData(show: true, drawVerticalLine: false),
+          titlesData: const FlTitlesData(
+            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), 
+          ),
+          borderData: FlBorderData(show: false),
+          lineBarsData: [
+            LineChartBarData(
+              spots: data.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value['Revenue'] as double)).toList(),
+              isCurved: true,
+              color: Colors.blue[700],
+              barWidth: 4,
+              belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.2)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_reportType == 'Categories') {
+      return PieChart(
+        PieChartData(
+          sectionsSpace: 2,
+          centerSpaceRadius: 60,
+          sections: data.asMap().entries.map((e) {
+            final color = Colors.primaries[e.key % Colors.primaries.length];
+            return PieChartSectionData(
+              color: color,
+              value: e.value['Revenue'] as double,
+              title: '${e.value['Category']}\n\$${(e.value['Revenue'] as double).toStringAsFixed(0)}',
+              radius: 80,
+              titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+            );
+          }).toList(),
+        ),
+      );
+    }
+
+    // Top Products & Low Performers (Bar Chart)
+    final top10Data = data.take(10).toList(); // Only chart top 10 to keep bars clean
+    return BarChart(
+      BarChartData(
+        gridData: const FlGridData(show: false),
+        titlesData: const FlTitlesData(
+            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), 
+          ),
+        borderData: FlBorderData(show: false),
+        barGroups: top10Data.asMap().entries.map((e) {
+          return BarChartGroupData(
+            x: e.key,
+            barRods: [
+              BarChartRodData(
+                toY: (e.value['Quantity Sold'] as int).toDouble(),
+                color: _reportType == 'Top Products' ? Colors.green[600] : Colors.orange[600],
+                width: 20,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+              )
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    final allSales = provider.getSales();
+    final allProducts = provider.getProducts();
+
+    final filteredSales = _getFilteredSales(allSales);
+    final reportData = _generateReportData(filteredSales, allProducts);
+    final fmt = NumberFormat.currency(symbol: '\$');
+
+    return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GridView.count(
-            crossAxisCount: 4,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 2.2,
-            children: [
-              StatCard(
-                title: 'Total Revenue',
-                value: fmt.format(totalRevenue),
-                icon: Icons.monetization_on_outlined,
-                color: Colors.green,
-                background_icon_color: const Color.fromARGB(255, 175, 255, 216),
+          // Header & Controls
+          Card(
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.bar_chart, color: Colors.blue[700], size: 28),
+                      const SizedBox(width: 8),
+                      const Text('System Reports', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                      const Spacer(),
+                      
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _timeFilter,
+                            icon: const Icon(Icons.calendar_today, size: 16),
+                            items: _timeFilters.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                            onChanged: (v) => setState(() => _timeFilter = v!),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: () => _exportToCSV(reportData),
+                        icon: const Icon(Icons.download),
+                        label: const Text('Export CSV'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green[700],
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _reportTypes.map((type) {
+                        final isSelected = _reportType == type;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: ChoiceChip(
+                            label: Text(type),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              if (selected) setState(() => _reportType = type);
+                            },
+                            selectedColor: Colors.blue[100],
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.blue[900] : Colors.grey[700],
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
               ),
-              StatCard(
-                title: 'Total Transactions',
-                value: '${sales.length}',
-                icon: Icons.receipt_long_outlined,
-                color: Colors.blue,
-                background_icon_color: const Color.fromARGB(255, 186, 233, 255),
-              ),
-              StatCard(
-                title: 'Average Sale',
-                value: fmt.format(avgSale),
-                icon: Icons.show_chart,
-                color: Colors.purple,
-                background_icon_color: const Color.fromARGB(255, 244, 182, 255),
-              ),
-              StatCard(
-                title: 'Products Sold',
-                value: '$totalItems',
-                icon: Icons.shopping_bag_outlined,
-                color: Colors.orange,
-                background_icon_color: Colors.orange.shade100,
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 24),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Sales trend chart
-              Expanded(
-                flex: 3,
-                child: Card(
-                  color: Colors.white,
-                  elevation: 2,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Sales Trend – Last 7 Days',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          height: 220,
-                          child: sales.isEmpty
-                              ? Center(
-                                  child: Text('No sales data',
-                                      style:
-                                          TextStyle(color: Colors.grey[400])))
-                              : BarChart(
-                                  BarChartData(
-                                    alignment: BarChartAlignment.spaceAround,
-                                    maxY: maxRevenue * 1.2 + 1,
-                                    barGroups: List.generate(days.length, (i) {
-                                      final rev = dailyRevenue[days[i]] ?? 0;
-                                      return BarChartGroupData(
-                                        x: i,
-                                        barRods: [
-                                          BarChartRodData(
-                                            toY: rev,
-                                            color: Colors.blue[600],
-                                            width: 28,
-                                            borderRadius:
-                                                const BorderRadius.vertical(
-                                                    top: Radius.circular(4)),
-                                          ),
-                                        ],
-                                      );
-                                    }),
-                                    titlesData: FlTitlesData(
-                                      leftTitles: AxisTitles(
-                                        sideTitles: SideTitles(
-                                          showTitles: true,
-                                          reservedSize: 60,
-                                          getTitlesWidget: (v, _) => Text(
-                                              fmt.format(v),
-                                              style: const TextStyle(
-                                                  fontSize: 10)),
-                                        ),
-                                      ),
-                                      bottomTitles: AxisTitles(
-                                        sideTitles: SideTitles(
-                                          showTitles: true,
-                                          getTitlesWidget: (v, _) {
-                                            final idx = v.toInt();
-                                            if (idx < 0 || idx >= days.length) {
-                                              return const SizedBox.shrink();
-                                            }
-                                            final label = days[idx]
-                                                .substring(5)
-                                                .replaceAll('-', '/');
-                                            return Padding(
-                                              padding: const EdgeInsets.only(
-                                                  top: 4),
-                                              child: Text(label,
-                                                  style: const TextStyle(
-                                                      fontSize: 10)),
+          
+          const SizedBox(height: 16),
+
+          // --- The Data Presentation Area ---
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Visual Chart Area (Left Side)
+                Expanded(
+                  flex: 3,
+                  child: Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text('$_reportType Chart', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 20),
+                          Expanded(child: _buildChart(reportData)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                
+                // Raw Data Table Area (Right Side)
+                Expanded(
+                  flex: 2,
+                  child: Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text('Raw Data', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          const Divider(),
+                          Expanded(
+                            child: reportData.isEmpty
+                              ? Center(child: Text('No data.', style: TextStyle(color: Colors.grey[400])))
+                              : SingleChildScrollView(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: DataTable(
+                                      headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
+                                      dataRowMinHeight: 35,
+                                      dataRowMaxHeight: 35,
+                                      columnSpacing: 20,
+                                      columns: reportData.first.keys.map((key) => DataColumn(
+                                            label: Text(key, style: const TextStyle(fontWeight: FontWeight.bold))
+                                          )).toList(),
+                                      rows: reportData.map((row) {
+                                        return DataRow(
+                                          cells: row.entries.map((entry) {
+                                            final val = entry.key == 'Revenue' 
+                                                ? fmt.format(entry.value) 
+                                                : entry.value.toString();
+                                            return DataCell(
+                                              SizedBox(
+                                                width: 100, 
+                                                child: Text(val, overflow: TextOverflow.ellipsis)
+                                              )
                                             );
-                                          },
-                                        ),
-                                      ),
-                                      topTitles: const AxisTitles(
-                                          sideTitles:
-                                              SideTitles(showTitles: false)),
-                                      rightTitles: const AxisTitles(
-                                          sideTitles:
-                                              SideTitles(showTitles: false)),
+                                          }).toList(),
+                                        );
+                                      }).toList(),
                                     ),
-                                    gridData: FlGridData(
-                                      drawVerticalLine: false,
-                                      getDrawingHorizontalLine: (v) =>
-                                          FlLine(color: Colors.grey[200]!),
-                                    ),
-                                    borderData: FlBorderData(show: false),
                                   ),
                                 ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Top products
-              Expanded(
-                flex: 2,
-                child: Card(
-                  color: Colors.white,
-                  elevation: 2,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Top Selling Products',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
-                        const SizedBox(height: 12),
-                        if (topProducts.isEmpty)
-                          Text('No sales data',
-                              style: TextStyle(color: Colors.grey[400]))
-                        else
-                          Table(
-                            columnWidths: const {
-                              0: FlexColumnWidth(3),
-                              1: FlexColumnWidth(1),
-                              2: FlexColumnWidth(2),
-                            },
-                            children: [
-                              TableRow(
-                                decoration: const BoxDecoration(
-                                    borderRadius: BorderRadius.all(Radius.circular(8)),
-                                    color: Color.fromARGB(255, 231, 231, 231)),
-                                children: [
-                                  _tableHeader('Product'),
-                                  _tableHeader('Qty'),
-                                  _tableHeader('Revenue'),
-                                ],
-                              ),
-                              ...topProducts.take(5).map(
-                                    (p) => TableRow(
-                                      children: [
-                                        _tableCell(
-                                            p['name'] as String, bold: true),
-                                        _tableCell(
-                                            '${p['qty']}'),
-                                        _tableCell(fmt.format(
-                                            p['revenue'] as double),
-                                            color: Colors.green[700]),
-                                      ],
-                                    ),
-                                  ),
-                            ],
                           ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
-
-  Widget _tableHeader(String text) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        child: Text(text,
-            style: const TextStyle(
-                fontWeight: FontWeight.bold, fontSize: 12)),
-      );
-
-  Widget _tableCell(String text, {bool bold = false, Color? color}) =>
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        child: Text(text,
-            style: TextStyle(
-                fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
-                color: color,
-                fontSize: 13)),
-      );
 }
