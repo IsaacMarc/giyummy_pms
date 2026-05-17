@@ -16,8 +16,6 @@ class _SalesScreenState extends State<SalesScreen> {
   final List<SaleItem> _cart = [];
   final _barcodeCtrl = TextEditingController();
   final _discountCtrl = TextEditingController(text: '0');
-  
-  // 1. ADDED: Controller for the new quantity field
   final _qtyCtrl = TextEditingController(text: '1'); 
   
   String _paymentMethod = 'Cash';
@@ -33,7 +31,7 @@ class _SalesScreenState extends State<SalesScreen> {
   void dispose() {
     _barcodeCtrl.dispose();
     _discountCtrl.dispose();
-    _qtyCtrl.dispose(); // Dispose the new controller
+    _qtyCtrl.dispose(); 
     super.dispose();
   }
 
@@ -45,7 +43,6 @@ class _SalesScreenState extends State<SalesScreen> {
   void _addToCart(List<Product> products) {
     if (_selectedProductId == null) return;
     
-    // 2. ADDED: Parse the quantity from the text field
     final qty = int.tryParse(_qtyCtrl.text) ?? 1;
     if (qty <= 0) {
       setState(() => _error = 'Quantity must be at least 1');
@@ -54,8 +51,6 @@ class _SalesScreenState extends State<SalesScreen> {
 
     final product = products.firstWhere((p) => p.id == _selectedProductId, orElse: () => products.first);
     _addProductToCart(product, qty);
-    
-    // Reset quantity back to 1 after adding
     _qtyCtrl.text = '1';
   }
 
@@ -63,21 +58,19 @@ class _SalesScreenState extends State<SalesScreen> {
     final barcode = _barcodeCtrl.text.trim();
     if (barcode.isEmpty) return;
     
-    // When scanning, default to 1, or use the typed quantity if they set it first
     final qty = int.tryParse(_qtyCtrl.text) ?? 1; 
 
     try {
       final product = products.firstWhere((p) => p.barcode == barcode);
       _addProductToCart(product, qty);
       _barcodeCtrl.clear();
-      _qtyCtrl.text = '1'; // Reset quantity back to 1
+      _qtyCtrl.text = '1'; 
     } catch (_) {
       setState(() => _error = 'Product with barcode "$barcode" not found');
       _barcodeCtrl.clear();
     }
   }
 
-  // 3. UPDATED: Accepts the qty amount and checks stock appropriately
   void _addProductToCart(Product product, int qtyToAdd) {
     if (product.stock == 0) {
       setState(() => _error = '${product.name} is out of stock');
@@ -120,44 +113,185 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _completeSale() async {
-    if (_cart.isEmpty) {
-      setState(() => _error = 'Cart is empty');
-      return;
+      if (_cart.isEmpty) {
+        setState(() => _error = 'Cart is empty');
+        return;
+      }
+
+      setState(() {
+        _isProcessing = true;
+        _error = null;
+        _success = null;
+      });
+
+      // 1. Snapshot the data for the receipt before the cart clears
+      final receiptItems = List<SaleItem>.from(_cart);
+      final receiptSubtotal = _subtotal;
+      final receiptDiscount = _discountAmt;
+      final receiptTotal = _finalTotal;
+      final receiptPayment = _paymentMethod;
+
+      // 2. FIX: Pass 'receiptItems' instead of '_cart' so clearing the UI doesn't wipe the memory!
+      final err = await context.read<AppProvider>().addSale(
+            receiptItems, 
+            _discountPct, 
+            _paymentMethod,
+          );
+
+      if (!mounted) return;
+      
+      setState(() => _isProcessing = false);
+
+      if (err != null) {
+        setState(() => _error = err);
+        return;
+      }
+      
+      // 3. Clear the cart data on the UI
+      setState(() {
+        _cart.clear(); // This is now safe to do!
+        _discountCtrl.text = '0';
+        _barcodeCtrl.clear();
+        _qtyCtrl.text = '1';
+        _success = 'Sale completed successfully!';
+      });
+
+      // 4. Display the Receipt Dialog
+      _showReceiptDialog(context, receiptItems, receiptSubtotal, receiptDiscount, receiptTotal, receiptPayment);
     }
 
-    setState(() {
-      _isProcessing = true;
-      _error = null;
-      _success = null;
-    });
+  // --- NEW: Receipt Dialog Widget ---
+  void _showReceiptDialog(BuildContext context, List<SaleItem> items, double subtotal, double discountAmt, double finalTotal, String paymentMethod) {
+    final fmt = NumberFormat.currency(symbol: '\$');
+    final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
 
-    final err = await context.read<AppProvider>().addSale(
-          _cart,
-          _discountPct, 
-          _paymentMethod,
-        );
+    showDialog(
+      context: context,
+      barrierDismissible: false, 
+      builder: (ctx) => AlertDialog(
+        title: const Center(child: Text('Receipt', style: TextStyle(fontWeight: FontWeight.bold))),
+        content: SizedBox(
+          width: 300,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(now, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                const SizedBox(height: 16),
+                const Divider(thickness: 2),
+                ...items.map((i) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: Text('${i.productName} (x${i.quantity})', overflow: TextOverflow.ellipsis)),
+                      Text(fmt.format(i.subtotal)),
+                    ],
+                  ),
+                )),
+                const Divider(thickness: 2),
+                _totalRow('Subtotal', fmt.format(subtotal)),
+                if (discountAmt > 0)
+                  _totalRow('Discount', '-${fmt.format(discountAmt)}', color: Colors.red),
+                _totalRow('Total', fmt.format(finalTotal), isBold: true),
+                const SizedBox(height: 8),
+                Text('Paid via $paymentMethod', style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
+                const SizedBox(height: 24),
+                const Text('Thank you for your purchase!', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
+            child: const Text('Close & Next Sale'),
+          )
+        ],
+      )
+    );
+  }
 
-    if (!mounted) return;
-    
-    setState(() => _isProcessing = false);
-
-    if (err != null) {
-      setState(() => _error = err);
-      return;
-    }
-    
-    setState(() {
-      _cart.clear();
-      _discountCtrl.text = '0';
-      _barcodeCtrl.clear();
-      _qtyCtrl.text = '1';
-      _success = 'Sale completed successfully!';
-    });
+  // --- NEW: View All Recent Sales Dialog Widget ---
+  void _showAllSalesDialog(BuildContext context, List<Sale> sales, NumberFormat fmt) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('All Recent Sales'),
+        content: SizedBox(
+          width: 600,
+          height: 500,
+          child: sales.isEmpty 
+            ? const Center(child: Text('No recent sales found.'))
+            : ListView.builder(
+              shrinkWrap: true,
+              itemCount: sales.length,
+              itemBuilder: (context, index) {
+                // Show newest first
+                final sale = sales.reversed.toList()[index]; 
+                final time = sale.timestamp.length >= 16 
+                    ? sale.timestamp.substring(0, 16).replaceAll('T', ' ') 
+                    : sale.timestamp;
+                
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  child: ExpansionTile(
+                    leading: Icon(Icons.receipt, color: Colors.blue[700]),
+                    title: Text('${fmt.format(sale.finalTotal)} - ${sale.paymentMethod}'),
+                    subtitle: Text('Cashier: ${sale.cashierName} • $time'),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          children: [
+                            ...sale.items.map((i) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('${i.quantity}x ${i.productName}'),
+                                  Text(fmt.format(i.subtotal)),
+                                ],
+                              ),
+                            )),
+                            const Divider(),
+                            if (sale.discount > 0)
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Discount:', style: TextStyle(color: Colors.red)),
+                                  Text('-${fmt.format(sale.discount)}', style: const TextStyle(color: Colors.red)),
+                                ],
+                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Final Total:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                Text(fmt.format(sale.finalTotal), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      )
+                    ],
+                  ),
+                );
+              }
+            ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
+        ],
+      )
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final products = context.watch<AppProvider>().getProducts();
+    final provider = context.watch<AppProvider>();
+    final products = provider.getProducts();
+    final allSales = provider.getSales(); 
     final inStockProducts = products.where((p) => p.stock > 0).toList();
     final fmt = NumberFormat.currency(symbol: '\$');
 
@@ -168,7 +302,7 @@ class _SalesScreenState extends State<SalesScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Left: product selection
+          // Left: Product Selection & Cart
           Expanded(
             flex: 3,
             child: Column(
@@ -253,7 +387,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         const Divider(),
                         const SizedBox(height: 12),
                         
-                        // 4. UPDATED: Dropdown, Quantity Field, and Add Button
+                        // Dropdown, Quantity Field, and Add Button
                         Row(
                           children: [
                             Expanded(
@@ -278,7 +412,6 @@ class _SalesScreenState extends State<SalesScreen> {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            // New Quantity TextField
                             SizedBox(
                               width: 80,
                               child: TextField(
@@ -305,7 +438,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Cart
+                // Shopping Cart
                 Expanded(
                   child: Card(
                     color: Colors.white,
@@ -378,97 +511,168 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
           ),
           const SizedBox(width: 16),
-          // Right: checkout
+          
+          // Right: Checkout & Recent Sales Stream
           SizedBox(
-            width: 280,
-            child: Card(
-              color: Colors.white,
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Checkout',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _discountCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Discount (%)',
-                        prefixIcon: Icon(Icons.percent),
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      keyboardType: TextInputType.number,
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: _paymentMethod,
-                      decoration: const InputDecoration(
-                        labelText: 'Payment Method',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: _paymentMethods
-                          .map((m) =>
-                              DropdownMenuItem(value: m, child: Text(m)))
-                          .toList(),
-                      onChanged: (v) =>
-                          setState(() => _paymentMethod = v ?? 'Cash'),
-                    ),
-                    const SizedBox(height: 20),
-                    const Divider(),
-                    _totalRow('Subtotal', fmt.format(_subtotal)),
-                    if (_discountPct > 0)
-                      _totalRow(
-                          'Discount (${_discountPct.toStringAsFixed(0)}%)',
-                          '-${fmt.format(_discountAmt)}',
-                          color: Colors.red[700]),
-                    const Divider(),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            width: 300,
+            // Wrapped in a ScrollView so the right side never overflows
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 1. Checkout Card
+                  Card(
+                    color: Colors.white,
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('Total',
+                          const Text('Checkout',
                               style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18)),
-                          Text(
-                            fmt.format(_finalTotal),
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                                color: Colors.green[700]),
+                                  fontWeight: FontWeight.bold, fontSize: 16)),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _discountCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Discount (%)',
+                              prefixIcon: Icon(Icons.percent),
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (_) => setState(() {}),
+                          ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<String>(
+                            initialValue: _paymentMethod,
+                            decoration: const InputDecoration(
+                              labelText: 'Payment Method',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            items: _paymentMethods
+                                .map((m) =>
+                                    DropdownMenuItem(value: m, child: Text(m)))
+                                .toList(),
+                            onChanged: (v) =>
+                                setState(() => _paymentMethod = v ?? 'Cash'),
+                          ),
+                          const SizedBox(height: 20),
+                          const Divider(),
+                          _totalRow('Subtotal', fmt.format(_subtotal)),
+                          if (_discountPct > 0)
+                            _totalRow(
+                                'Discount (${_discountPct.toStringAsFixed(0)}%)',
+                                '-${fmt.format(_discountAmt)}',
+                                color: Colors.red[700]),
+                          const Divider(),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Total',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18)),
+                                Text(
+                                  fmt.format(_finalTotal),
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                      color: Colors.green[700]),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              onPressed: _isProcessing ? null : _completeSale,
+                              icon: _isProcessing 
+                                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+                                  : const Icon(Icons.check_circle_outline),
+                              label: Text(_isProcessing ? 'Processing...' : 'Complete Sale',
+                                  style: const TextStyle(
+                                      fontSize: 15, fontWeight: FontWeight.w600)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green[700],
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 48,
-                      child: ElevatedButton.icon(
-                        onPressed: _isProcessing ? null : _completeSale,
-                        icon: _isProcessing 
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-                            : const Icon(Icons.check_circle_outline),
-                        label: Text(_isProcessing ? 'Processing...' : 'Complete Sale',
-                            style: const TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.w600)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                        ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // 2. Recent Sales Card
+                  Card(
+                    color: Colors.white,
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Recent Sales', 
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              TextButton(
+                                onPressed: () => _showAllSalesDialog(context, allSales, fmt),
+                                child: const Text('View All'),
+                              )
+                            ],
+                          ),
+                          const Divider(),
+                          if (allSales.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8),
+                              child: Text('No sales today.', style: TextStyle(color: Colors.grey)),
+                            )
+                          else
+                            // Render a quick preview of the last 3 sales
+                            ...allSales.reversed.take(3).map((s) {
+                              final time = s.timestamp.length >= 16 
+                                  ? s.timestamp.substring(11, 16) 
+                                  : '';
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.receipt, color: Colors.grey[400], size: 16),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(s.cashierName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                          Text('${s.items.length} items · $time',
+                                              style: TextStyle(color: Colors.grey[500], fontSize: 11)),
+                                        ],
+                                      ),
+                                    ),
+                                    Text(fmt.format(s.finalTotal),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold, color: Colors.green)),
+                                  ],
+                                ),
+                              );
+                            }),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
+                    )
+                  )
+                ],
               ),
             ),
           ),
@@ -477,16 +681,16 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  Widget _totalRow(String label, String value, {Color? color}) {
+  Widget _totalRow(String label, String value, {Color? color, bool isBold = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: Colors.grey[700])),
+          Text(label, style: TextStyle(color: isBold ? Colors.black : Colors.grey[700], fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
           Text(value,
               style: TextStyle(
-                  fontWeight: FontWeight.w600, color: color)),
+                  fontWeight: isBold ? FontWeight.bold : FontWeight.w600, color: color)),
         ],
       ),
     );

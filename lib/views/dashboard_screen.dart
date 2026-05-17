@@ -85,7 +85,7 @@ class DashboardScreen extends StatelessWidget {
                   elevation: 2,
                   color: Colors.white,
                   child: Padding(
-                    padding: const EdgeInsets.only(top:20,right:20,left:20,bottom: 20),
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -99,23 +99,26 @@ class DashboardScreen extends StatelessWidget {
                                     fontWeight: FontWeight.bold, fontSize: 16)),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        const Divider(
-                                height: 8,      // The total space occupied by the divider
-                                thickness: 2,    // The actual thickness of the line  // Empty space to the right
-                                color: Colors.grey,
-                              ),
                         const SizedBox(height: 16),
                         if (lowStock.isEmpty && outOfStock.isEmpty)
                           Text('All products are well stocked!',
                               style: TextStyle(color: Colors.grey[500]))
-                        else ...[
-                          ...outOfStock.take(3).map((p) => _stockRow(
-                              p, Colors.red[700]!, 'Out of Stock')),
-                          ...lowStock.take(5 - outOfStock.length.clamp(0, 3)).map(
-                              (p) => _stockRow(
-                                  p, Colors.orange[700]!, 'Low Stock')),
-                        ],
+                        else
+                          // NEW: Constrained container with a ScrollView
+                          Container(
+                            constraints: const BoxConstraints(maxHeight: 220), 
+                            child: SingleChildScrollView(
+                              child: Column(
+                                children: [
+                                  // Removed the .take(3) and .take(5) limits so ALL items show up
+                                  ...outOfStock.map((p) => _stockRow(
+                                      p, Colors.red[700]!, 'Out of Stock')),
+                                  ...lowStock.map((p) => _stockRow(
+                                      p, Colors.orange[700]!, 'Low Stock')),
+                                ],
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -134,20 +137,25 @@ class DashboardScreen extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.receipt_outlined,
-                                color: Colors.blue[700], size: 20),
+                            Icon(Icons.receipt_outlined, color: Colors.blue[700], size: 20),
                             const SizedBox(width: 8),
                             const Text('Recent Sales',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 16)),
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                           ],
                         ),
                         const SizedBox(height: 16),
                         if (sales.isEmpty)
-                          Text('No sales yet.',
-                              style: TextStyle(color: Colors.grey[500]))
+                          Text('No sales yet.', style: TextStyle(color: Colors.grey[500]))
                         else
-                          ...sales.reversed.take(5).map((s) => _saleRow(s, fmt)),
+                          // NEW: Constrained scrollable container for ALL recent sales
+                          Container(
+                            constraints: const BoxConstraints(maxHeight: 220),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                children: sales.reversed.map((s) => _saleRow(s, fmt)).toList(),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
