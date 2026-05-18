@@ -266,7 +266,7 @@ Future<void> restoreSession() async {
     await _storage.clearAllAlerts(); // Wipe from SQLite
     await _addAuditLog('DELETE', 'Alerts', 'Cleared all system notifications');
   }
-  
+
   Future<void> _generateStockAlerts() async {
     await _processExpirations();
 
@@ -338,6 +338,43 @@ Future<void> restoreSession() async {
     await _addAuditLog('DELETE', 'Users', 'Deleted user: ${user.username}');
   }
 
+  // --- NEW: Admin User Controls ---
+  Future<String?> adminAddUser(String username, String email, String password, String role, String department, String phone) async {
+    // Check if username is taken
+    if (_users.any((u) => u.username.toLowerCase() == username.toLowerCase())) {
+      return 'Username already exists';
+    }
+    
+    final newUser = User(
+      id: _uuid.v4(),
+      username: username,
+      passwordHash: AuthService.hashPassword(password),
+      role: role,
+      email: email,
+      createdAt: DateTime.now().toIso8601String(),
+      department: department, 
+      phone: phone,
+      isActive: true,
+    );
+    
+    _users.add(newUser);
+    notifyListeners(); 
+    
+    await _storage.saveUser(newUser); 
+    await _addAuditLog('CREATE', 'Users', 'Admin created new user: $username');
+    return null;
+  }
+
+  Future<void> updateUser(User updated) async {
+    final idx = _users.indexWhere((u) => u.id == updated.id);
+    if (idx >= 0) {
+      _users[idx] = updated;
+      notifyListeners(); 
+      
+      await _storage.saveUser(updated);
+      await _addAuditLog('UPDATE', 'Users', 'Admin updated details for: ${updated.username}');
+    }
+  }
   // ── Profile ───────────────────────────────────────────────────────────────────
 
   Future<String?> updateProfile({required String email, required String phone, required String department}) async {
