@@ -46,6 +46,32 @@ class AlertsScreen extends StatelessWidget {
                     ),
                   ],
                   const Spacer(),
+                  // Add this TextButton to your header Row
+                  TextButton.icon(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Clear All Alerts?'),
+                          content: const Text('Are you sure you want to delete all notifications? This cannot be undone.'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                            ElevatedButton(
+                              onPressed: () {
+                                context.read<AppProvider>().clearAllAlerts();
+                                Navigator.pop(ctx);
+                              },
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                              child: const Text('Clear All', style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.clear_all),
+                    label: const Text('Clear All'),
+                    style: TextButton.styleFrom(foregroundColor: Colors.red[700]),
+                  ),
                   if (unread > 0)
                     OutlinedButton.icon(
                       onPressed: provider.markAllAlertsRead,

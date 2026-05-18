@@ -144,8 +144,8 @@ class StorageService {
       }
     }
   
-
-  // --- MISSING METHOD: Restores from the internal backups folder ---
+  
+  //Restores from the internal backups folder ---
   Future<void> restoreFromBackupFile(String filename) async {
     final appDir = await getApplicationDocumentsDirectory();
     final file = File(p.join(appDir.path, 'product_management_data', 'backups', filename));
@@ -256,6 +256,11 @@ class StorageService {
   Future<void> deleteAlert(String id) async {
     final db = await DatabaseService.instance.database;
     await db.delete('alerts', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> clearAllAlerts() async {
+    final db = await DatabaseService.instance.database;
+    await db.delete('alerts'); // Deletes all rows in the alerts table
   }
 
 }

@@ -9,7 +9,7 @@ May 18, 2026 (DONE)
 - Add summarized card tabs ontop of reports module (done)
 - Add option where all of data are expoerted in reports module in csv (done)
 - In reports module the highlighted graphs should display the product not the number (done)
-- In alerts module add a featuer where you can clear all the notifications
+- In alerts module add a featuer where you can clear all the notifications (done)
 - Profile module, pls redo the UI cause it looks like ass cheeks / add overview / security / last login and account status
 - Help module, also redo the UI and add FAQ, USER GUIDES and CONTACT SUPPORT 
 - User management module I want to display all the users, number of active, deactivated, admins, managers and employees
@@ -19,3 +19,7 @@ May 18, 2026 (DONE)
  - - -- - - - - - -/ - -- - - - - - - - - - - - - - - - - - - - - - / - - - - - - - - - - - - - - - -
 AMBITIOUS ADDITIONS
 - PICTURE CLICK OF SALE ITEM TO CLICK AND IT WILL ADD TO SALE
+
+
+ISSUES:
+- since the application resets after 60 seconds the notifications comebacks again

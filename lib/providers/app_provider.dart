@@ -259,7 +259,15 @@ Future<void> restoreSession() async {
     if (changesMade) notifyListeners();
   }
 
-Future<void> _generateStockAlerts() async {
+  Future<void> clearAllAlerts() async {
+    _alerts.clear(); // Empty the in-memory list
+    notifyListeners(); // Instantly update UI (removes the red badge!)
+    
+    await _storage.clearAllAlerts(); // Wipe from SQLite
+    await _addAuditLog('DELETE', 'Alerts', 'Cleared all system notifications');
+  }
+  
+  Future<void> _generateStockAlerts() async {
     await _processExpirations();
 
     // REMOVED the old existingProductAlerts check that was blocking escalations
