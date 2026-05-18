@@ -1,14 +1,14 @@
 TO DO LIST / PROBLEMS:
-May 18, 2026
+May 18, 2026 (DONE)
 - Lowstock alert in dashboard is not reflecting expired products (done)
 - Sales module select product does not include item quantity (done)
 - There is no reciept message after completing Sales (done)
 - When product is now expired, feature of stock will automatically convert to 0 is not working (done)
  - - -- - - - - - -/ - -- - - - - - - - - - - - - - - - - - - - - - / - - - - - - - - - - - - - - - -
  May 19, 2026 (If finished all of these new features then system is 85% done)
-- Add summarized card tabs ontop of reports module
-- Add option where all of data are expoerted in reports module in csv
-- In reports module the highlighted graphs should display the product not the number
+- Add summarized card tabs ontop of reports module (done)
+- Add option where all of data are expoerted in reports module in csv (done)
+- In reports module the highlighted graphs should display the product not the number (done)
 - In alerts module add a featuer where you can clear all the notifications
 - Profile module, pls redo the UI cause it looks like ass cheeks / add overview / security / last login and account status
 - Help module, also redo the UI and add FAQ, USER GUIDES and CONTACT SUPPORT 

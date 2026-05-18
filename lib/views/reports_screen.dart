@@ -4,9 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:fl_chart/fl_chart.dart'; // NEW: Imported the charting library
+import 'package:fl_chart/fl_chart.dart';
 import '../providers/app_provider.dart';
 import '../models/models.dart';
+import '../widgets/stat_card.dart'; // NEW: Imported the KPI Card widget
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -21,6 +22,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   
   final List<String> _reportTypes = ['Sales Trend', 'Top Products', 'Categories', 'Low Performers'];
   final List<String> _timeFilters = ['Today', 'Last 7 Days', 'Last 30 Days'];
+
+  // --- Data Processing Logic ---
 
   List<Sale> _getFilteredSales(List<Sale> allSales) {
     final now = DateTime.now();
@@ -110,6 +113,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return data;
   }
 
+  // --- CSV Export Logic ---
+
   Future<void> _exportToCSV(List<Map<String, dynamic>> reportData) async {
     if (reportData.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No data to export.')));
@@ -121,9 +126,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       csvRows.add(row.values.toList());
     }
     String csvString = const ListToCsvConverter().convert(csvRows);
-    String? outputFile = await FilePicker.saveFile( // <-- Removed .platform here
+    String? outputFile = await FilePicker.saveFile(
       dialogTitle: 'Save Report as CSV',
-      fileName: '${_reportType.replaceAll(' ', '_')}_$_timeFilter.csv',
+      fileName: '${_reportType.replaceAll(' ', '_')}_${_timeFilter.replaceAll(' ', '_')}.csv',
       type: FileType.custom,
       allowedExtensions: ['csv'],
     );
@@ -144,7 +149,63 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  // --- NEW: Dynamic Chart Generator ---
+  // NEW: Flattened Raw Data Export
+  Future<void> _exportAllRawDataToCSV(List<Sale> filteredSales, List<Product> products) async {
+    if (filteredSales.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No data to export.')));
+      return;
+    }
+
+    List<List<dynamic>> csvRows = [];
+    csvRows.add([
+      'Date', 'Cashier', 'Payment Method', 'Product Category', 'Product Name', 'Quantity', 'Unit Price', 'Subtotal', 'Transaction Discount', 'Transaction Total'
+    ]);
+
+    for (var sale in filteredSales) {
+      for (var item in sale.items) {
+        final prod = products.firstWhere((p) => p.id == item.productId, orElse: () => products.first);
+        csvRows.add([
+          sale.timestamp,
+          sale.cashierName,
+          sale.paymentMethod,
+          prod.category,
+          item.productName,
+          item.quantity,
+          item.price,
+          item.subtotal,
+          sale.discount,
+          sale.finalTotal
+        ]);
+      }
+    }
+
+    String csvString = const ListToCsvConverter().convert(csvRows);
+
+    String? outputFile = await FilePicker.saveFile(
+      dialogTitle: 'Save All Data as CSV',
+      fileName: 'All_Sales_Data_${_timeFilter.replaceAll(' ', '_')}.csv',
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+
+    if (outputFile != null) {
+      try {
+        final file = File(outputFile);
+        await file.writeAsString(csvString);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('All data exported to $outputFile'), backgroundColor: Colors.green),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save file: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // --- Dynamic Chart Generator ---
   Widget _buildChart(List<Map<String, dynamic>> data) {
     if (data.isEmpty || (data.every((e) => e['Revenue'] == 0 && e['Quantity Sold'] == 0))) {
       return Center(child: Text('Not enough data to display chart', style: TextStyle(color: Colors.grey[400])));
@@ -153,6 +214,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (_reportType == 'Sales Trend') {
       return LineChart(
         LineChartData(
+          // 1. NEW: Custom line chart tooltips that show the Date instead of index!
+          lineTouchData: LineTouchData(
+            touchTooltipData: LineTouchTooltipData(
+              getTooltipColor: (touchedSpot) => Colors.blueGrey[800]!,
+              getTooltipItems: (touchedSpots) {
+                return touchedSpots.map((spot) {
+                  final date = data[spot.x.toInt()]['Date'];
+                  return LineTooltipItem(
+                    '$date\n',
+                    const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    children: [
+                      TextSpan(
+                        text: '\$${spot.y.toStringAsFixed(2)}',
+                        style: const TextStyle(color: Colors.greenAccent, fontSize: 13),
+                      ),
+                    ],
+                  );
+                }).toList();
+              },
+            ),
+          ),
           gridData: const FlGridData(show: true, drawVerticalLine: false),
           titlesData: const FlTitlesData(
             topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -193,9 +275,28 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
 
     // Top Products & Low Performers (Bar Chart)
-    final top10Data = data.take(10).toList(); // Only chart top 10 to keep bars clean
+    final top10Data = data.take(10).toList(); 
     return BarChart(
       BarChartData(
+        // 2. NEW: Custom Bar chart tooltips that pull the String name from the data map!
+        barTouchData: BarTouchData(
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (group) => Colors.blueGrey[800]!,
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              final productName = top10Data[group.x.toInt()]['Product'];
+              return BarTooltipItem(
+                '$productName\n',
+                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                children: [
+                  TextSpan(
+                    text: '${rod.toY.toInt()} sold',
+                    style: const TextStyle(color: Colors.yellowAccent, fontSize: 13),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
         gridData: const FlGridData(show: false),
         titlesData: const FlTitlesData(
             topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -230,6 +331,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final reportData = _generateReportData(filteredSales, allProducts);
     final fmt = NumberFormat.currency(symbol: '\$');
 
+    // --- NEW: Calculate KPIs for the active Time Filter ---
+    double totalRevenue = 0.0;
+    int totalItemsSold = 0;
+    for (var s in filteredSales) {
+      totalRevenue += s.finalTotal;
+      for (var i in s.items) {
+        totalItemsSold += i.quantity;
+      }
+    }
+    int totalTransactions = filteredSales.length;
+    double avgOrderValue = totalTransactions > 0 ? totalRevenue / totalTransactions : 0.0;
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -242,6 +355,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
+                  // Row 1: Title and Actions
                   Row(
                     children: [
                       Icon(Icons.bar_chart, color: Colors.blue[700], size: 28),
@@ -265,10 +379,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         ),
                       ),
                       const SizedBox(width: 12),
+                      
+                      // NEW: Dual Export Buttons
+                      OutlinedButton.icon(
+                        onPressed: () => _exportAllRawDataToCSV(filteredSales, allProducts),
+                        icon: const Icon(Icons.download_outlined),
+                        label: const Text('Export All Data'),
+                        style: OutlinedButton.styleFrom(foregroundColor: Colors.green[700]),
+                      ),
+                      const SizedBox(width: 8),
                       ElevatedButton.icon(
                         onPressed: () => _exportToCSV(reportData),
-                        icon: const Icon(Icons.download),
-                        label: const Text('Export CSV'),
+                        icon: const Icon(Icons.view_list),
+                        label: const Text('Export Current'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green[700],
                           foregroundColor: Colors.white,
@@ -276,7 +399,55 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 24),
+                  
+                  // Row 2: NEW System Statistics Cards dynamically tied to the time filter
+                  Row(
+                    children: [
+                      Expanded(
+                        child: StatCard(
+                          title: 'Total Revenue',
+                          value: fmt.format(totalRevenue),
+                          icon: Icons.attach_money,
+                          color: Colors.green,
+                          background_icon_color: const Color.fromARGB(255, 145, 255, 149),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: StatCard(
+                          title: 'Transactions',
+                          value: '$totalTransactions',
+                          icon: Icons.receipt_long,
+                          color: Colors.blue,
+                          background_icon_color: const Color.fromARGB(255, 166, 227, 255),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: StatCard(
+                          title: 'Items Sold',
+                          value: '$totalItemsSold',
+                          icon: Icons.inventory_2_outlined,
+                          color: Colors.orange,
+                          background_icon_color: const Color.fromARGB(255, 255, 211, 146),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: StatCard(
+                          title: 'Avg Order Value',
+                          value: fmt.format(avgOrderValue),
+                          icon: Icons.analytics_outlined,
+                          color: Colors.purple,
+                          background_icon_color: const Color.fromARGB(255, 230, 180, 255),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 20),
+                  
+                  // Row 3: Chart View Selection Chips
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
