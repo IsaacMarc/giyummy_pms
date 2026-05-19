@@ -365,16 +365,21 @@ Future<void> restoreSession() async {
     return null;
   }
 
-  Future<void> updateUser(User updated) async {
-    final idx = _users.indexWhere((u) => u.id == updated.id);
-    if (idx >= 0) {
-      _users[idx] = updated;
-      notifyListeners(); 
-      
-      await _storage.saveUser(updated);
-      await _addAuditLog('UPDATE', 'Users', 'Admin updated details for: ${updated.username}');
+  Future<void> updateUser(User updated, {String? newPassword}) async {
+      final idx = _users.indexWhere((u) => u.id == updated.id);
+      if (idx >= 0) {
+        // NEW: If the admin typed a new password, hash it and apply it to the user object
+        if (newPassword != null && newPassword.isNotEmpty) {
+          updated.passwordHash = AuthService.hashPassword(newPassword);
+        }
+        
+        _users[idx] = updated;
+        notifyListeners(); 
+        
+        await _storage.saveUser(updated);
+        await _addAuditLog('UPDATE', 'Users', 'Admin updated details for: ${updated.username}');
+      }
     }
-  }
   // ── Profile ───────────────────────────────────────────────────────────────────
 
   Future<String?> updateProfile({required String email, required String phone, required String department}) async {

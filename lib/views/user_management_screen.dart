@@ -15,14 +15,14 @@ class UserManagementScreen extends StatefulWidget {
 class _UserManagementScreenState extends State<UserManagementScreen> {
   String? _error;
 
-  void _showUserDialog(BuildContext context, [User? user]) {
+void _showUserDialog(BuildContext context, [User? user]) {
     final isEditing = user != null;
     
     final usernameCtrl = TextEditingController(text: user?.username ?? '');
     final emailCtrl = TextEditingController(text: user?.email ?? '');
     final phoneCtrl = TextEditingController(text: user?.phone ?? '');
     final deptCtrl = TextEditingController(text: user?.department ?? '');
-    final passCtrl = TextEditingController(); // Only used for new users
+    final passCtrl = TextEditingController(); 
     
     String selectedRole = user?.role ?? 'Employee';
     bool isActive = user?.isActive ?? true;
@@ -46,7 +46,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                       child: Text(_error!, style: const TextStyle(color: Colors.red)),
                     ),
                   
-                  // Username (Disabled if editing because it's a unique identifier)
                   TextField(
                     controller: usernameCtrl,
                     enabled: !isEditing,
@@ -60,19 +59,17 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Password (Only show when creating a new user)
-                  if (!isEditing) ...[
-                    TextField(
-                      controller: passCtrl,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Initial Password',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
+                  // FIX: Password field is now ALWAYS visible for Admins
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: isEditing ? 'New Password (Leave blank to keep)' : 'Initial Password',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
                     ),
-                    const SizedBox(height: 12),
-                  ],
+                  ),
+                  const SizedBox(height: 12),
 
                   Row(
                     children: [
@@ -116,14 +113,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   ),
                   const SizedBox(height: 12),
                   
-                  // Status Toggle
                   SwitchListTile(
                     title: const Text('Account Active'),
                     subtitle: Text(isActive ? 'User can log in' : 'Account is disabled', style: TextStyle(color: isActive ? Colors.green : Colors.red)),
                     value: isActive,
                     contentPadding: EdgeInsets.zero,
                     onChanged: (val) {
-                      // Prevent admin from deactivating themselves
                       if (isEditing && user.id == context.read<AppProvider>().currentUser?.id) {
                         setDialogState(() => _error = "You cannot deactivate your own account.");
                         return;
@@ -157,7 +152,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 final provider = context.read<AppProvider>();
 
                 if (isEditing) {
-                  // Create a fresh User object safely bypassing the final restrictions
                   final updatedUser = User(
                     id: user.id,
                     username: user.username,
@@ -170,7 +164,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     department: deptCtrl.text.trim(),
                     phone: phoneCtrl.text.trim(),
                   );
-                  await provider.updateUser(updatedUser);
+                  // FIX: Pass the new password to the provider if they typed one
+                  await provider.updateUser(updatedUser, newPassword: passCtrl.text.trim());
                 } else {
                   final err = await provider.adminAddUser(
                     username, 

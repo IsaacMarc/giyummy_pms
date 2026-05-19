@@ -12,7 +12,8 @@ May 18, 2026 (DONE)
 - In alerts module add a featuer where you can clear all the notifications (done)
 - User management module I want to display all the users, number of active, deactivated, admins, managers and employees (done)
 - I want admins to modify account details of others users in user management (done)
-- Profile module, pls redo the UI cause it looks like ass cheeks / add overview / security / last login and account status
+- Profile module, pls redo the UI cause it looks like ass cheeks / add overview / security / last login and account status (done)
+
 - Help module, also redo the UI and add FAQ, USER GUIDES and CONTACT SUPPORT 
 
  - - -- - - - - - -/ - -- - - - - - - - - - - - - - - - - - - - - - / - - - - - - - - - - - - - - - -
@@ -22,3 +23,7 @@ AMBITIOUS ADDITIONS
 
 ISSUES:
 - since the application resets after 60 seconds the notifications comebacks again
+- no search in sales module
+- if stock goes to 0 due to sales purchase, it returns a null for some reason even tho di dapat
+- report module sales trend
+- Modify profile, usermanagemnet and login to include player ID

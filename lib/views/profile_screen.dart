@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 
@@ -13,21 +14,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _emailCtrl;
   late TextEditingController _phoneCtrl;
   late TextEditingController _deptCtrl;
-  final _currentPassCtrl = TextEditingController();
-  final _newPassCtrl = TextEditingController();
-  final _confirmPassCtrl = TextEditingController();
-  String? _profileMsg;
-  bool _profileSuccess = false;
-  String? _passMsg;
-  bool _passSuccess = false;
+
+  String? _overviewMsg;
+  String? _overviewErr;
 
   @override
   void initState() {
     super.initState();
-    final user = context.read<AppProvider>().currentUser!;
-    _emailCtrl = TextEditingController(text: user.email);
-    _phoneCtrl = TextEditingController(text: user.phone);
-    _deptCtrl = TextEditingController(text: user.department);
+    _emailCtrl = TextEditingController();
+    _phoneCtrl = TextEditingController();
+    _deptCtrl = TextEditingController();
   }
 
   @override
@@ -35,305 +31,257 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
     _deptCtrl.dispose();
-    _currentPassCtrl.dispose();
-    _newPassCtrl.dispose();
-    _confirmPassCtrl.dispose();
     super.dispose();
   }
 
-void _saveProfile() async { // 1. Mark the method as async
-    // 2. Await the provider call directly
-    final err = await context.read<AppProvider>().updateProfile(
-          email: _emailCtrl.text.trim(),
-          phone: _phoneCtrl.text.trim(),
-          department: _deptCtrl.text.trim(),
-        );
+  void _updateProfile() async {
+    final provider = context.read<AppProvider>();
+    final err = await provider.updateProfile(
+      email: _emailCtrl.text.trim(),
+      phone: _phoneCtrl.text.trim(),
+      department: _deptCtrl.text.trim(),
+    );
 
-    // 3. Ensure the user hasn't navigated away while waiting
-    if (!mounted) return; 
-
-    // 4. Update the UI synchronously
     setState(() {
-      _profileMsg = err; // err is now the resolved String, not a Future
-      _profileSuccess = err == null;
-    });
-  }
-
-  void _changePassword() async { // Mark as async
-    final current = _currentPassCtrl.text;
-    final newPass = _newPassCtrl.text;
-    final confirm = _confirmPassCtrl.text;
-
-    if (current.isEmpty || newPass.isEmpty || confirm.isEmpty) {
-      setState(() {
-        _passMsg = 'All fields are required';
-        _passSuccess = false;
-      });
-      return;
-    }
-    if (newPass != confirm) {
-      setState(() {
-        _passMsg = 'New passwords do not match';
-        _passSuccess = false;
-      });
-      return;
-    }
-    if (newPass.length < 6) {
-      setState(() {
-        _passMsg = 'Password must be at least 6 characters';
-        _passSuccess = false;
-      });
-      return;
-    }
-
-    // Await the provider call
-    final err = await context.read<AppProvider>().changePassword(current, newPass);
-    
-    if (!mounted) return;
-
-    // Update UI synchronously
-    setState(() {
-      _passMsg = err ?? 'Password changed successfully!';
-      _passSuccess = err == null;
-      if (err == null) {
-        _currentPassCtrl.clear();
-        _newPassCtrl.clear();
-        _confirmPassCtrl.clear();
+      if (err != null) {
+        _overviewErr = err;
+        _overviewMsg = null;
+      } else {
+        _overviewMsg = 'Profile updated successfully!';
+        _overviewErr = null;
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AppProvider>().currentUser!;
+    final user = context.watch<AppProvider>().currentUser;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Profile header
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 36,
-                    backgroundColor: Colors.blue[100],
-                    child: Text(
-                      user.username[0].toUpperCase(),
-                      style: TextStyle(
-                          color: Colors.blue[700],
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold),
+    if (user == null) {
+      return const Center(child: Text('Please log in to view profile.'));
+    }
+
+    if (_emailCtrl.text.isEmpty && user.email.isNotEmpty) _emailCtrl.text = user.email;
+    if (_phoneCtrl.text.isEmpty && user.phone.isNotEmpty) _phoneCtrl.text = user.phone;
+    if (_deptCtrl.text.isEmpty && user.department.isNotEmpty) _deptCtrl.text = user.department;
+
+    final joinDate = DateFormat('MMMM dd, yyyy').format(DateTime.parse(user.createdAt));
+    final lastLoginStr = user.lastLogin != null 
+        ? DateFormat('MMMM dd, yyyy - hh:mm a').format(DateTime.parse(user.lastLogin!))
+        : 'First Login';
+
+    return DefaultTabController(
+      length: 2, // FIX: Reduced to 2 tabs
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Colors.blue[100],
+                      child: Text(
+                        user.username.substring(0, 1).toUpperCase(),
+                        style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue[800]),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 20),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(user.username,
-                          style: const TextStyle(
-                              fontSize: 22, fontWeight: FontWeight.bold)),
-                      Text(user.role,
-                          style: TextStyle(
-                              color: Colors.blue[700],
-                              fontWeight: FontWeight.w600)),
-                      Text(user.email,
-                          style: TextStyle(color: Colors.grey[600])),
-                    ],
-                  ),
-                ],
+                    const SizedBox(width: 24),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.username,
+                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: user.role == 'Admin' ? Colors.purple[50] : Colors.blue[50],
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: user.role == 'Admin' ? Colors.purple[200]! : Colors.blue[200]!),
+                                ),
+                                child: Text(
+                                  user.role,
+                                  style: TextStyle(
+                                    color: user.role == 'Admin' ? Colors.purple[700] : Colors.blue[700],
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Icon(Icons.business, size: 16, color: Colors.grey[600]),
+                              const SizedBox(width: 4),
+                              Text(user.department.isNotEmpty ? user.department : 'No Department', style: TextStyle(color: Colors.grey[700])),
+                            ],
+                          )
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Personal info
-              Expanded(
-                child: Card(
-                  elevation: 2,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Personal Information',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
-                        const SizedBox(height: 20),
-                        _label('Username'),
-                        TextField(
-                          controller:
-                              TextEditingController(text: user.username),
-                          enabled: false,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                            filled: true,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _label('Email'),
-                        TextField(
-                          controller: _emailCtrl,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _label('Phone'),
-                        TextField(
-                          controller: _phoneCtrl,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _label('Department'),
-                        TextField(
-                          controller: _deptCtrl,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        if (_profileMsg != null)
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: _profileSuccess
-                                  ? Colors.green[50]
-                                  : Colors.red[50],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                  color: _profileSuccess
-                                      ? Colors.green[200]!
-                                      : Colors.red[200]!),
-                            ),
-                            child: Text(_profileMsg!,
-                                style: TextStyle(
-                                    color: _profileSuccess
-                                        ? Colors.green[700]
-                                        : Colors.red[700],
-                                    fontSize: 13)),
-                          ),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _saveProfile,
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue[700],
-                                foregroundColor: Colors.white),
-                            child: const Text('Save Changes'),
-                          ),
-                        ),
-                      ],
+            const SizedBox(height: 24),
+
+            Expanded(
+              child: Card(
+                elevation: 2,
+                child: Column(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+                      ),
+                      child: const TabBar(
+                        labelColor: Colors.blue,
+                        unselectedLabelColor: Colors.grey,
+                        indicatorColor: Colors.blue,
+                        tabs: [
+                          Tab(icon: Icon(Icons.person_outline), text: 'Overview'),
+                          Tab(icon: Icon(Icons.info_outline), text: 'Account Status'),
+                        ],
+                      ),
                     ),
-                  ),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          // 1. OVERVIEW TAB
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.all(32.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Personal Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 8),
+                                Text('Update your contact details and internal department assignments.', style: TextStyle(color: Colors.grey[600])),
+                                const SizedBox(height: 24),
+                                
+                                if (_overviewMsg != null) _statusBanner(_overviewMsg!, true),
+                                if (_overviewErr != null) _statusBanner(_overviewErr!, false),
+                                
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _emailCtrl,
+                                        decoration: const InputDecoration(labelText: 'Email Address', border: OutlineInputBorder(), prefixIcon: Icon(Icons.email_outlined)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _phoneCtrl,
+                                        decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone_outlined)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  width: MediaQuery.of(context).size.width / 2.3,
+                                  child: TextField(
+                                    controller: _deptCtrl,
+                                    decoration: const InputDecoration(labelText: 'Department', border: OutlineInputBorder(), prefixIcon: Icon(Icons.business_outlined)),
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                ElevatedButton.icon(
+                                  onPressed: _updateProfile,
+                                  icon: const Icon(Icons.save),
+                                  label: const Text('Save Changes'),
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                                    backgroundColor: Colors.blue[700],
+                                    foregroundColor: Colors.white,
+                                  ),
+                                )
+                              ],
+                            ),
+                          ),
+
+                          // 2. ACCOUNT STATUS TAB
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.all(32.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('System Access & Logs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 8),
+                                Text('Overview of your system privileges and activity history.', style: TextStyle(color: Colors.grey[600])),
+                                const SizedBox(height: 24),
+
+                                _infoRow(Icons.verified_user_outlined, 'Account Status', user.isActive ? 'Active & Healthy' : 'Deactivated', user.isActive ? Colors.green : Colors.red),
+                                const Divider(height: 32),
+                                _infoRow(Icons.calendar_today_outlined, 'Date Joined', joinDate, Colors.black87),
+                                const Divider(height: 32),
+                                _infoRow(Icons.login_outlined, 'Last Login', lastLoginStr, Colors.black87),
+                                const Divider(height: 32),
+                                _infoRow(Icons.badge_outlined, 'System Role', user.role, Colors.black87),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 20),
-              // Change password
-              Expanded(
-                child: Card(
-                  elevation: 2,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Change Password',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
-                        const SizedBox(height: 20),
-                        _label('Current Password'),
-                        TextField(
-                          controller: _currentPassCtrl,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _label('New Password'),
-                        TextField(
-                          controller: _newPassCtrl,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _label('Confirm New Password'),
-                        TextField(
-                          controller: _confirmPassCtrl,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        if (_passMsg != null)
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: _passSuccess
-                                  ? Colors.green[50]
-                                  : Colors.red[50],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                  color: _passSuccess
-                                      ? Colors.green[200]!
-                                      : Colors.red[200]!),
-                            ),
-                            child: Text(_passMsg!,
-                                style: TextStyle(
-                                    color: _passSuccess
-                                        ? Colors.green[700]
-                                        : Colors.red[700],
-                                    fontSize: 13)),
-                          ),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _changePassword,
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange[700],
-                                foregroundColor: Colors.white),
-                            child: const Text('Change Password'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statusBanner(String message, bool isSuccess) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isSuccess ? Colors.green[50] : Colors.red[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isSuccess ? Colors.green[200]! : Colors.red[200]!),
+      ),
+      child: Row(
+        children: [
+          Icon(isSuccess ? Icons.check_circle_outline : Icons.error_outline, color: isSuccess ? Colors.green[700] : Colors.red[700]),
+          const SizedBox(width: 12),
+          Expanded(child: Text(message, style: TextStyle(color: isSuccess ? Colors.green[700] : Colors.red[700]))),
         ],
       ),
     );
   }
 
-  Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(text,
-            style: TextStyle(
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[700],
-                fontSize: 13)),
-      );
+  Widget _infoRow(IconData icon, String title, String value, Color valueColor) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: Colors.grey[100], shape: BoxShape.circle),
+          child: Icon(icon, color: Colors.blue[700]),
+        ),
+        const SizedBox(width: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+            const SizedBox(height: 4),
+            Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: valueColor)),
+          ],
+        )
+      ],
+    );
+  }
 }
