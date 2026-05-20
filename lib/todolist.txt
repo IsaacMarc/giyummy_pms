@@ -13,17 +13,20 @@ May 18, 2026 (DONE)
 - User management module I want to display all the users, number of active, deactivated, admins, managers and employees (done)
 - I want admins to modify account details of others users in user management (done)
 - Profile module, pls redo the UI cause it looks like ass cheeks / add overview / security / last login and account status (done)
-
-- Help module, also redo the UI and add FAQ, USER GUIDES and CONTACT SUPPORT 
+- Help module, also redo the UI and add FAQ, USER GUIDES and CONTACT SUPPORT  (done)
 
  - - -- - - - - - -/ - -- - - - - - - - - - - - - - - - - - - - - - / - - - - - - - - - - - - - - - -
 AMBITIOUS ADDITIONS
 - PICTURE CLICK OF SALE ITEM TO CLICK AND IT WILL ADD TO SALE
 
-
 ISSUES:
-- since the application resets after 60 seconds the notifications comebacks again
-- no search in sales module
-- if stock goes to 0 due to sales purchase, it returns a null for some reason even tho di dapat
-- report module sales trend
-- Modify profile, usermanagemnet and login to include player ID
+- since the application resets after 60 seconds the notifications comebacks again (non-issue)
+- no search in sales module (done)
+- if stock goes to 0 due to sales purchase, it returns a null for some reason even tho di dapat (done)
+- report module sales trend 
+
+
+- Modify profile, usermanagemnet and login to include employeeID
+- Help module know where send us a message go
+- Help module make each user guide clickable to view more indepth guide
+- 

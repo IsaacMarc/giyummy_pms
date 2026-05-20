@@ -113,54 +113,53 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _completeSale() async {
-      if (_cart.isEmpty) {
-        setState(() => _error = 'Cart is empty');
-        return;
-      }
-
-      setState(() {
-        _isProcessing = true;
-        _error = null;
-        _success = null;
-      });
-
-      // 1. Snapshot the data for the receipt before the cart clears
-      final receiptItems = List<SaleItem>.from(_cart);
-      final receiptSubtotal = _subtotal;
-      final receiptDiscount = _discountAmt;
-      final receiptTotal = _finalTotal;
-      final receiptPayment = _paymentMethod;
-
-      // 2. FIX: Pass 'receiptItems' instead of '_cart' so clearing the UI doesn't wipe the memory!
-      final err = await context.read<AppProvider>().addSale(
-            receiptItems, 
-            _discountPct, 
-            _paymentMethod,
-          );
-
-      if (!mounted) return;
-      
-      setState(() => _isProcessing = false);
-
-      if (err != null) {
-        setState(() => _error = err);
-        return;
-      }
-      
-      // 3. Clear the cart data on the UI
-      setState(() {
-        _cart.clear(); // This is now safe to do!
-        _discountCtrl.text = '0';
-        _barcodeCtrl.clear();
-        _qtyCtrl.text = '1';
-        _success = 'Sale completed successfully!';
-      });
-
-      // 4. Display the Receipt Dialog
-      _showReceiptDialog(context, receiptItems, receiptSubtotal, receiptDiscount, receiptTotal, receiptPayment);
+    if (_cart.isEmpty) {
+      setState(() => _error = 'Cart is empty');
+      return;
     }
 
-  // --- NEW: Receipt Dialog Widget ---
+    setState(() {
+      _isProcessing = true;
+      _error = null;
+      _success = null;
+    });
+
+    // Snapshot the data for the receipt before the cart clears
+    final receiptItems = List<SaleItem>.from(_cart);
+    final receiptSubtotal = _subtotal;
+    final receiptDiscount = _discountAmt;
+    final receiptTotal = _finalTotal;
+    final receiptPayment = _paymentMethod;
+
+    final err = await context.read<AppProvider>().addSale(
+          receiptItems, // Using snapshot to prevent memory bug
+          _discountPct, 
+          _paymentMethod,
+        );
+
+    if (!mounted) return;
+    
+    setState(() => _isProcessing = false);
+
+    if (err != null) {
+      setState(() => _error = err);
+      return;
+    }
+    
+    // Clear the cart data on the UI
+    setState(() {
+      _cart.clear();
+      _discountCtrl.text = '0';
+      _barcodeCtrl.clear();
+      _qtyCtrl.text = '1';
+      _success = 'Sale completed successfully!';
+    });
+
+    // Display the Receipt Dialog
+    _showReceiptDialog(context, receiptItems, receiptSubtotal, receiptDiscount, receiptTotal, receiptPayment);
+  }
+
+  // --- Receipt Dialog Widget ---
   void _showReceiptDialog(BuildContext context, List<SaleItem> items, double subtotal, double discountAmt, double finalTotal, String paymentMethod) {
     final fmt = NumberFormat.currency(symbol: '\$');
     final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
@@ -213,7 +212,7 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  // --- NEW: View All Recent Sales Dialog Widget ---
+  // --- View All Recent Sales Dialog Widget ---
   void _showAllSalesDialog(BuildContext context, List<Sale> sales, NumberFormat fmt) {
     showDialog(
       context: context,
@@ -228,7 +227,6 @@ class _SalesScreenState extends State<SalesScreen> {
               shrinkWrap: true,
               itemCount: sales.length,
               itemBuilder: (context, index) {
-                // Show newest first
                 final sale = sales.reversed.toList()[index]; 
                 final time = sale.timestamp.length >= 16 
                     ? sale.timestamp.substring(0, 16).replaceAll('T', ' ') 
@@ -295,6 +293,10 @@ class _SalesScreenState extends State<SalesScreen> {
     final inStockProducts = products.where((p) => p.stock > 0).toList();
     final fmt = NumberFormat.currency(symbol: '\$');
 
+    if (_selectedProductId != null && !inStockProducts.any((p) => p.id == _selectedProductId)) {
+      _selectedProductId = null;
+    }
+    
     _selectedProductId ??= inStockProducts.isNotEmpty ? inStockProducts.first.id : null;
 
     return Padding(
@@ -349,7 +351,6 @@ class _SalesScreenState extends State<SalesScreen> {
                         style: TextStyle(color: Colors.green[700])),
                   ),
                 Card(
-                  color: Colors.white,
                   elevation: 2,
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -387,28 +388,34 @@ class _SalesScreenState extends State<SalesScreen> {
                         const Divider(),
                         const SizedBox(height: 12),
                         
-                        // Dropdown, Quantity Field, and Add Button
+                        // NEW: Searchable DropdownMenu, Quantity Field, and Add Button
                         Row(
                           children: [
                             Expanded(
                               flex: 3,
-                              child: DropdownButtonFormField<String>(
-                                initialValue: _selectedProductId,
-                                decoration: const InputDecoration(
-                                  labelText: 'Select Product',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
-                                items: inStockProducts.map((p) {
-                                  return DropdownMenuItem(
-                                    value: p.id,
-                                    child: Text(
-                                        '${p.name} (Stock: ${p.stock}) - ${fmt.format(p.price)}',
-                                        overflow: TextOverflow.ellipsis),
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  return DropdownMenu<String>(
+                                    width: constraints.maxWidth,
+                                    enableFilter: true, // Turns on typing search!
+                                    requestFocusOnTap: true,
+                                    leadingIcon: const Icon(Icons.search, size: 20),
+                                    label: const Text('Search & Select Product'),
+                                    inputDecorationTheme: const InputDecorationTheme(
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                    ),
+                                    initialSelection: _selectedProductId,
+                                    dropdownMenuEntries: inStockProducts.map((p) {
+                                      return DropdownMenuEntry<String>(
+                                        value: p.id,
+                                        label: '${p.name} (Stock: ${p.stock}) - ${fmt.format(p.price)}',
+                                      );
+                                    }).toList(),
+                                    onSelected: (v) => setState(() => _selectedProductId = v),
                                   );
-                                }).toList(),
-                                onChanged: (v) =>
-                                    setState(() => _selectedProductId = v),
+                                },
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -441,7 +448,6 @@ class _SalesScreenState extends State<SalesScreen> {
                 // Shopping Cart
                 Expanded(
                   child: Card(
-                    color: Colors.white,
                     elevation: 2,
                     child: Padding(
                       padding: const EdgeInsets.all(20),
@@ -515,14 +521,12 @@ class _SalesScreenState extends State<SalesScreen> {
           // Right: Checkout & Recent Sales Stream
           SizedBox(
             width: 300,
-            // Wrapped in a ScrollView so the right side never overflows
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // 1. Checkout Card
                   Card(
-                    color: Colors.white,
                     elevation: 2,
                     child: Padding(
                       padding: const EdgeInsets.all(20),
@@ -615,7 +619,6 @@ class _SalesScreenState extends State<SalesScreen> {
                   
                   // 2. Recent Sales Card
                   Card(
-                    color: Colors.white,
                     elevation: 2,
                     child: Padding(
                       padding: const EdgeInsets.all(20),
@@ -640,7 +643,6 @@ class _SalesScreenState extends State<SalesScreen> {
                               child: Text('No sales today.', style: TextStyle(color: Colors.grey)),
                             )
                           else
-                            // Render a quick preview of the last 3 sales
                             ...allSales.reversed.take(3).map((s) {
                               final time = s.timestamp.length >= 16 
                                   ? s.timestamp.substring(11, 16) 
