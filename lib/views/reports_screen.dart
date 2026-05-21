@@ -226,7 +226,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                     children: [
                       TextSpan(
-                        text: '\$${spot.y.toStringAsFixed(2)}',
+                        text: '\₱${spot.y.toStringAsFixed(2)}',
                         style: const TextStyle(color: Colors.greenAccent, fontSize: 13),
                       ),
                     ],
@@ -265,7 +265,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             return PieChartSectionData(
               color: color,
               value: e.value['Revenue'] as double,
-              title: '${e.value['Category']}\n\$${(e.value['Revenue'] as double).toStringAsFixed(0)}',
+              title: '${e.value['Category']}\n\₱${(e.value['Revenue'] as double).toStringAsFixed(0)}',
               radius: 80,
               titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
             );
@@ -329,7 +329,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     final filteredSales = _getFilteredSales(allSales);
     final reportData = _generateReportData(filteredSales, allProducts);
-    final fmt = NumberFormat.currency(symbol: '\$');
+    final fmt = NumberFormat.currency(symbol: '\₱');
 
     // --- NEW: Calculate KPIs for the active Time Filter ---
     double totalRevenue = 0.0;

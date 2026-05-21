@@ -250,7 +250,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final products = context.watch<AppProvider>().getProducts();
     final filtered = _filtered(products);
     final categories = _categories(products);
-    final fmt = NumberFormat.currency(symbol: '\$');
+    final fmt = NumberFormat.currency(symbol: '\₱');
 
     return Padding(
       padding: const EdgeInsets.all(24),

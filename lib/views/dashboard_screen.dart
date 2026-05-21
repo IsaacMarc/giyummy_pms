@@ -26,7 +26,7 @@ class DashboardScreen extends StatelessWidget {
         products.where((p) => p.stock > 0 && p.stock <= p.reorderLevel).toList();
     final outOfStock = products.where((p) => p.stock == 0).toList();
 
-    final fmt = NumberFormat.currency(symbol: '\$');
+    final fmt = NumberFormat.currency(symbol: '\₱');
     // This accurately catches Low Stock, Out of Stock, AND Expired items!
     final activeAlertCount = products.where((p) => p.status != 'In Stock').length;
 

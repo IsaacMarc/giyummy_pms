@@ -161,7 +161,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   // --- Receipt Dialog Widget ---
   void _showReceiptDialog(BuildContext context, List<SaleItem> items, double subtotal, double discountAmt, double finalTotal, String paymentMethod) {
-    final fmt = NumberFormat.currency(symbol: '\$');
+    final fmt = NumberFormat.currency(symbol: '\₱');
     final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
 
     showDialog(
@@ -291,7 +291,7 @@ class _SalesScreenState extends State<SalesScreen> {
     final products = provider.getProducts();
     final allSales = provider.getSales(); 
     final inStockProducts = products.where((p) => p.stock > 0).toList();
-    final fmt = NumberFormat.currency(symbol: '\$');
+    final fmt = NumberFormat.currency(symbol: '\₱');
 
     if (_selectedProductId != null && !inStockProducts.any((p) => p.id == _selectedProductId)) {
       _selectedProductId = null;
