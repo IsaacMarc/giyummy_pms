@@ -53,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Center(
         child: SingleChildScrollView(
           child: Container(
-            width: 400,
+            width: 600,
             padding: const EdgeInsets.all(40),
             decoration: BoxDecoration(
               color: Colors.white,
@@ -76,11 +76,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.blue[50],
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(Icons.inventory_2_outlined,
-                          color: Colors.blue[700], size: 32),
+                      child: const Image(image: AssetImage("assets/images/giyummy.png"), width: 150, height: 150),
                     ),
                   ],
                 ),

@@ -63,46 +63,15 @@ class _Sidebar extends StatelessWidget {
 
     return Container(
       width: 220,
-      color: const Color(0xFF1E293B),
+      color: const Color(0xFF0B0B0B),
       child: Column(
         children: [
           const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.blue[600],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.inventory, color: Colors.white, size: 20),
-                ),
-                const SizedBox(width: 10),
-                const Flexible(
-                  child: Text(
-                    'ProductMgr',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          const Padding(
+            padding:  EdgeInsets.symmetric(horizontal: 16),
+            child:  Image(image: AssetImage("assets/images/giyummy.png"), width: 240, height: 180)
           ),
           const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              user?.role ?? '',
-              style: TextStyle(color: Colors.blue[300], fontSize: 12),
-            ),
-          ),
-          const SizedBox(height: 24),
           const Divider(color: Colors.white12, height: 1),
           const SizedBox(height: 8),
           Expanded(
@@ -113,7 +82,7 @@ class _Sidebar extends StatelessWidget {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Material(
-                    color: selected ? Colors.blue[700] : Colors.transparent,
+                    color: selected ? Colors.grey[850] : Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(8),
