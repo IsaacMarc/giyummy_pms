@@ -39,6 +39,7 @@ class Sale {
   final String cashierName;
   final String timestamp;
   final String status;
+  String? receiptImagePath;
 
   Sale({
     required this.id,
@@ -50,6 +51,7 @@ class Sale {
     required this.cashierName,
     required this.timestamp,
     this.status = 'completed',
+    this.receiptImagePath,
   });
 
   factory Sale.fromJson(Map<String, dynamic> json) {
@@ -70,11 +72,12 @@ class Sale {
       cashierName: json['cashierName'] as String,               // Fixed from cashier_name
       
       timestamp: json['timestamp'] as String,
-      status: json['status'] as String? ?? 'completed',         // Added status
+      status: json['status'] as String? ?? 'completed',
+      receiptImagePath: json['receiptImagePath'] as String?,    // <--- ADDED: Reads the image path from the database
     );
   }
 
-Map<String, dynamic> toJson() {
+  Map<String, dynamic> toJson() {
     return {
       'id': id,
       // Keep items exactly like this, StorageService will encode it
@@ -86,6 +89,7 @@ Map<String, dynamic> toJson() {
       'cashierName': cashierName,     // Fixed from cashier_name
       'timestamp': timestamp,
       'status': status,               // Keep this, we will add it to the DB next
+      'receiptImagePath': receiptImagePath, // <--- ADDED: Saves the image path to the database
     };
   }
 }

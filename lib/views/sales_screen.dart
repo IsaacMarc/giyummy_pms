@@ -4,7 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../models/models.dart';
-
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
 
@@ -213,7 +216,10 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   // --- View All Recent Sales Dialog Widget ---
-  void _showAllSalesDialog(BuildContext context, List<Sale> sales, NumberFormat fmt) {
+// --- UPDATED: View All Recent Sales Dialog Widget ---
+  void _showAllSalesDialog(BuildContext context) {
+    final fmt = NumberFormat.currency(symbol: '\$');
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -221,62 +227,121 @@ class _SalesScreenState extends State<SalesScreen> {
         content: SizedBox(
           width: 600,
           height: 500,
-          child: sales.isEmpty 
-            ? const Center(child: Text('No recent sales found.'))
-            : ListView.builder(
-              shrinkWrap: true,
-              itemCount: sales.length,
-              itemBuilder: (context, index) {
-                final sale = sales.reversed.toList()[index]; 
-                final time = sale.timestamp.length >= 16 
-                    ? sale.timestamp.substring(0, 16).replaceAll('T', ' ') 
-                    : sale.timestamp;
-                
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  child: ExpansionTile(
-                    leading: Icon(Icons.receipt, color: Colors.blue[700]),
-                    title: Text('${fmt.format(sale.finalTotal)} - ${sale.paymentMethod}'),
-                    subtitle: Text('Cashier: ${sale.cashierName} • $time'),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          children: [
-                            ...sale.items.map((i) => Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 2),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text('${i.quantity}x ${i.productName}'),
-                                  Text(fmt.format(i.subtotal)),
-                                ],
-                              ),
-                            )),
-                            const Divider(),
-                            if (sale.discount > 0)
+          // 1. Wrapped in a Consumer so the image appears instantly after uploading!
+          child: Consumer<AppProvider>(
+            builder: (context, provider, child) {
+              final sales = provider.getSales();
+              
+              if (sales.isEmpty) {
+                return const Center(child: Text('No recent sales found.'));
+              }
+
+              return ListView.builder(
+                shrinkWrap: true,
+                itemCount: sales.length,
+                itemBuilder: (context, index) {
+                  final sale = sales.reversed.toList()[index]; 
+                  final time = sale.timestamp.length >= 16 
+                      ? sale.timestamp.substring(0, 16).replaceAll('T', ' ') 
+                      : sale.timestamp;
+                  
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    child: ExpansionTile(
+                      leading: Icon(Icons.receipt, color: Colors.blue[700]),
+                      title: Text('${fmt.format(sale.finalTotal)} - ${sale.paymentMethod}'),
+                      subtitle: Text('Cashier: ${sale.cashierName} • $time'),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              ...sale.items.map((i) => Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 2),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text('${i.quantity}x ${i.productName}'),
+                                    Text(fmt.format(i.subtotal)),
+                                  ],
+                                ),
+                              )),
+                              const Divider(),
+                              if (sale.discount > 0)
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('Discount:', style: TextStyle(color: Colors.red)),
+                                    Text('-${fmt.format(sale.discount)}', style: const TextStyle(color: Colors.red)),
+                                  ],
+                                ),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text('Discount:', style: TextStyle(color: Colors.red)),
-                                  Text('-${fmt.format(sale.discount)}', style: const TextStyle(color: Colors.red)),
+                                  const Text('Final Total:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  Text(fmt.format(sale.finalTotal), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                                 ],
                               ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Final Total:', style: TextStyle(fontWeight: FontWeight.bold)),
-                                Text(fmt.format(sale.finalTotal), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                              const SizedBox(height: 16),
+                              const Divider(),
+                              
+                              // --- NEW: Receipt Image Viewer ---
+                              if (sale.receiptImagePath != null) ...[
+                                const Text('Attached Receipt:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 8),
+                                Center(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.file(
+                                      File(sale.receiptImagePath!),
+                                      height: 300,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
                               ],
-                            ),
-                          ],
-                        ),
-                      )
-                    ],
-                  ),
-                );
-              }
-            ),
+                              
+                              // --- NEW: Upload Button Logic ---
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    // 1. Pick the file
+                                    final result = await FilePicker.pickFiles(type: FileType.image);
+                                    if (result != null && result.files.single.path != null) {
+                                      
+                                      // 2. Get the permanent app data folder
+                                      final appDir = await getApplicationDocumentsDirectory();
+                                      final receiptsDir = Directory('${appDir.path}/receipts');
+                                      if (!await receiptsDir.exists()) {
+                                        await receiptsDir.create(recursive: true);
+                                      }
+                                      
+                                      // 3. Copy image and rename it based on the Sale ID
+                                      final ext = path.extension(result.files.single.path!);
+                                      final fileName = 'receipt_${sale.id}$ext';
+                                      final savedImage = await File(result.files.single.path!).copy('${receiptsDir.path}/$fileName');
+                                      
+                                      // 4. Save path to database
+                                      await provider.attachReceiptToSale(sale.id, savedImage.path);
+                                    }
+                                  },
+                                  icon: const Icon(Icons.camera_alt_outlined),
+                                  label: Text(sale.receiptImagePath == null ? 'Attach Receipt Image' : 'Update Receipt Image'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      ],
+                    ),
+                  );
+                }
+              );
+            }
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
@@ -631,7 +696,7 @@ class _SalesScreenState extends State<SalesScreen> {
                               const Text('Recent Sales', 
                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                               TextButton(
-                                onPressed: () => _showAllSalesDialog(context, allSales, fmt),
+                                onPressed: () => _showAllSalesDialog(context),
                                 child: const Text('View All'),
                               )
                             ],

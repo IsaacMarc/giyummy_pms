@@ -208,6 +208,18 @@ Future<void> restoreSession() async {
     return null;
   }
 
+    // --- NEW: Attach Receipt Image to Sale ---
+  Future<void> attachReceiptToSale(String saleId, String imagePath) async {
+    final idx = _sales.indexWhere((s) => s.id == saleId);
+    if (idx >= 0) {
+      _sales[idx].receiptImagePath = imagePath;
+      notifyListeners(); // Instantly update the UI
+      
+      await _storage.updateSale(_sales[idx]); // Save to SQLite
+      await _addAuditLog('UPDATE', 'Sales', 'Attached receipt image to sale $saleId');
+    }
+  }
+  
   // ── Alerts ────────────────────────────────────────────────────────────────────
 
   List<Alert> getAlerts() {
@@ -380,6 +392,7 @@ Future<void> restoreSession() async {
         await _addAuditLog('UPDATE', 'Users', 'Admin updated details for: ${updated.username}');
       }
     }
+
   // ── Profile ───────────────────────────────────────────────────────────────────
 
   Future<String?> updateProfile({required String email, required String phone, required String department}) async {

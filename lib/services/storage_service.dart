@@ -74,6 +74,7 @@ class StorageService {
     final db = await DatabaseService.instance.database;
     await db.delete('products', where: 'id = ?', whereArgs: [id]);
   }
+  
   // ─── Audit Logs ───────────────────────────────────────────────────
 
   Future<List<AuditLog>> getAuditLogs() async {
@@ -111,7 +112,6 @@ class StorageService {
 
   // ─── Export Logic for Backups ─────────────────────────────────────
 
-  // Gathers data from all SQLite tables and packages it into a map
   // Gathers data from ALL SQLite tables and packages it into a map
   Future<Map<String, dynamic>> exportAllData() async {
     final db = await DatabaseService.instance.database;
@@ -124,8 +124,6 @@ class StorageService {
       'backups': await db.query('backups'),
     };
   }
-
-  
 
   // Writes the exported map to a physical JSON file on the computer
   Future<void> saveBackupFile(String filename, Map<String, dynamic> data) async {
@@ -143,7 +141,6 @@ class StorageService {
         print("Error creating backup file: $e");
       }
     }
-  
   
   //Restores from the internal backups folder ---
   Future<void> restoreFromBackupFile(String filename) async {
@@ -171,8 +168,8 @@ class StorageService {
       }
     });
   }
-    // NEW: Reads a JSON file and overwrites the SQLite database
-// NEW: Reads a JSON file from ANY folder on the computer
+
+  // NEW: Reads a JSON file from ANY folder on the computer
   Future<void> restoreFromAbsolutePath(String filePath) async {
     final file = File(filePath);
 
@@ -197,6 +194,7 @@ class StorageService {
       }
     });
   }
+
   // ─── Sales ────────────────────────────────────────────────────────
 
   Future<List<Sale>> getSales() async {
@@ -211,8 +209,16 @@ class StorageService {
     }).toList();
   }
 
-  Future<void> saveSale(Sale sale) async {
+ Future<void> saveSale(Sale sale) async {
     final db = await DatabaseService.instance.database;
+    
+    // --- FIX: Add the column safely before trying to insert a new sale! ---
+    try {
+      await db.execute("ALTER TABLE sales ADD COLUMN receiptImagePath TEXT");
+    } catch (_) {
+      // Ignore if the column already exists
+    }
+
     final map = sale.toJson();
     
     // Encode the List of items into a flat JSON string for SQLite storage
@@ -223,6 +229,24 @@ class StorageService {
       map,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  // --- NEW: Update an existing sale (used for attaching receipts) ---
+  Future<void> updateSale(Sale sale) async {
+    final db = await DatabaseService.instance.database;
+    
+    // Safely attempt to inject the new column into the existing database
+    try {
+      await db.execute("ALTER TABLE sales ADD COLUMN receiptImagePath TEXT");
+    } catch (_) {
+      // Ignore if the column already exists
+    }
+
+    final map = sale.toJson();
+    // Re-encode the items list to a JSON string just like we do in saveSale
+    map['items'] = jsonEncode(map['items']);
+
+    await db.update('sales', map, where: 'id = ?', whereArgs: [sale.id]);
   }
 
   // ─── Alerts ───────────────────────────────────────────────────────

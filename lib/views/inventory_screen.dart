@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // NEW: Imported for number formatting
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -51,6 +52,159 @@ class _InventoryScreenState extends State<InventoryScreen> {
     _showProductDialog(ctx, product);
   }
 
+  // --- NEW: Smart Bulk Restock Feature ---
+  void _showBulkRestockDialog(BuildContext ctx) {
+    final provider = ctx.read<AppProvider>();
+    final products = provider.getProducts();
+    
+    // Automatically find everything that is Low Stock or Out of Stock
+    final lowStockProducts = products.where((p) => p.stock <= p.reorderLevel).toList();
+
+    if (lowStockProducts.isEmpty) {
+      showDialog(
+        context: ctx,
+        builder: (dialogCtx) => AlertDialog(
+          title: const Row(children: [Icon(Icons.check_circle, color: Colors.green), SizedBox(width: 8), Text('Inventory Healthy')]),
+          content: const Text('All products are currently well-stocked. No items need immediate restocking.'),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Close'))],
+        )
+      );
+      return;
+    }
+
+    // Map to hold controllers for each product ID
+    final Map<String, TextEditingController> qtyCtrls = {};
+    for (var p in lowStockProducts) {
+      // Suggest ordering enough to comfortably exceed the reorder level
+      int suggestedOrder = (p.reorderLevel * 2) - p.stock;
+      if (suggestedOrder < 20) suggestedOrder = 20; // Ensure at least 20 units are suggested
+      qtyCtrls[p.id] = TextEditingController(text: suggestedOrder.toString());
+    }
+
+    bool isProcessing = false;
+
+    showDialog(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (_, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.local_shipping_outlined, color: Colors.blue[700], size: 28),
+              const SizedBox(width: 12),
+              const Text('Bulk Restock Order'),
+            ],
+          ),
+          content: SizedBox(
+            width: 550,
+            height: 500,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('The following ${lowStockProducts.length} items are running low. Enter the delivery quantities below to instantly update the system.', style: TextStyle(color: Colors.grey[700])),
+                const SizedBox(height: 16),
+                const Divider(),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: lowStockProducts.length,
+                    separatorBuilder: (_, __) => const Divider(),
+                    itemBuilder: (context, index) {
+                      final p = lowStockProducts[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Current Stock: ${p.stock}   •   Reorder Level: ${p.reorderLevel}', 
+                                    style: TextStyle(
+                                      fontSize: 12, 
+                                      color: p.stock == 0 ? Colors.red[700] : Colors.orange[700],
+                                      fontWeight: FontWeight.w600
+                                    )
+                                  ),
+                                ],
+                              )
+                            ),
+                            const SizedBox(width: 16),
+                            SizedBox(
+                              width: 120,
+                              child: TextField(
+                                controller: qtyCtrls[p.id],
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: const InputDecoration(
+                                  labelText: '+ Add Qty',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                  prefixIcon: Icon(Icons.add, size: 16),
+                                ),
+                              ),
+                            )
+                          ],
+                        ),
+                      );
+                    }
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isProcessing ? null : () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: isProcessing ? null : () async {
+                setDialogState(() => isProcessing = true);
+                
+                // Loop through and update every item they provided a number for
+                for (var p in lowStockProducts) {
+                  final qtyToAdd = int.tryParse(qtyCtrls[p.id]?.text ?? '0') ?? 0;
+                  if (qtyToAdd > 0) {
+                    p.stock += qtyToAdd;
+                    p.updatedAt = DateTime.now().toIso8601String();
+                    
+                    // Clear the expiration status if it was expired, since this is fresh stock
+                    if (p.status == 'Expired') {
+                       p.expirationDate = null; 
+                       p.autoDispose = false;
+                    }
+                    
+                    await provider.updateProduct(p);
+                  }
+                }
+                
+                if (ctx.mounted) {
+                  Navigator.pop(dialogCtx);
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('Bulk restock completed successfully!'), backgroundColor: Colors.green),
+                  );
+                }
+              },
+              icon: isProcessing 
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.check_circle_outline),
+              label: Text(isProcessing ? 'Processing...' : 'Confirm Restock'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green[700], 
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+            )
+          ],
+        )
+      )
+    );
+  }
+
   void _showProductDialog(BuildContext ctx, Product? product) {
     final nameCtrl = TextEditingController(text: product?.name ?? '');
     final categoryCtrl = TextEditingController(text: product?.category ?? '');
@@ -91,15 +245,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Expanded(child: _field(priceCtrl, 'Price')),
+                      Expanded(child: _field(priceCtrl, 'Price', isNumber: true)),
                       const SizedBox(width: 12),
-                      Expanded(child: _field(stockCtrl, 'Stock')),
+                      Expanded(child: _field(stockCtrl, 'Stock', isNumber: true)),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Expanded(child: _field(reorderCtrl, 'Reorder Level')),
+                      Expanded(child: _field(reorderCtrl, 'Reorder Level', isNumber: true)),
                       const SizedBox(width: 12),
                       Expanded(child: _field(barcodeCtrl, 'Barcode')),
                     ],
@@ -145,7 +299,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     value: autoDispose,
                     contentPadding: EdgeInsets.zero,
                     onChanged: selectedExpDate == null 
-                        ? null // Disable if no date is set
+                        ? null 
                         : (val) => setDialogState(() => autoDispose = val),
                   ),
                   if (selectedExpDate != null)
@@ -180,7 +334,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   return;
                 }
                 if (price == null || stock == null || reorder == null) {
-                  setDialogState(() => err = 'Price, stock, reorder must be numbers');
+                  setDialogState(() => err = 'Price, stock, reorder must be valid numbers');
                   return;
                 }
                 
@@ -250,12 +404,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final products = context.watch<AppProvider>().getProducts();
     final filtered = _filtered(products);
     final categories = _categories(products);
-    final fmt = NumberFormat.currency(symbol: '\₱');
+    final fmt = NumberFormat.currency(symbol: '\$');
 
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Card(
-        color: Colors.white,
         elevation: 2,
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -265,33 +418,41 @@ class _InventoryScreenState extends State<InventoryScreen> {
               Row(
                 children: [
                   const Text('Products', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                  const SizedBox(width: 12),
-                    SizedBox(
-                    width: 400,
+                  const Spacer(),
+                  SizedBox(
+                    width: 220,
                     child: TextField(
-
                       controller: _searchCtrl,
-                      decoration:  InputDecoration(
-                        filled: true,
-                        fillColor: Colors.grey[200],
-                        hintText: 'Search products/barcode',
-                        prefixIcon: const Icon(Icons.search, size: 18),
-                        border: const OutlineInputBorder(),
+                      decoration: const InputDecoration(
+                        hintText: 'Search products/barcode...',
+                        prefixIcon: Icon(Icons.search, size: 18),
+                        border: OutlineInputBorder(),
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                        contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
-                  const Spacer(),
-                  SizedBox(width: 250, child: DropdownButton<String>(
-                    menuWidth: 250,
+                  const SizedBox(width: 12),
+                  DropdownButton<String>(
                     value: _categoryFilter,
                     items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                     onChanged: (v) => setState(() => _categoryFilter = v ?? 'All'),
-                  ),),
-                 
+                  ),
+                  const SizedBox(width: 16),
+                  
+                  // --- NEW: The Bulk Restock Button ---
+                  OutlinedButton.icon(
+                    onPressed: () => _showBulkRestockDialog(context),
+                    icon: const Icon(Icons.inventory_outlined),
+                    label: const Text('Bulk Restock'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.orange[700],
+                      side: BorderSide(color: Colors.orange[700]!),
+                    ),
+                  ),
                   const SizedBox(width: 12),
+                  
                   ElevatedButton.icon(
                     onPressed: () => _showAddDialog(context),
                     icon: const Icon(Icons.add),
@@ -303,7 +464,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              Expanded(
+ Expanded(
                 child: SingleChildScrollView(
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -384,7 +545,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text('${filtered.length} of ${products.length} products',
-                    style: const TextStyle(color: Color.fromARGB(255, 67, 67, 67), fontSize: 13)),
+                    style: TextStyle(color: Colors.grey[500], fontSize: 13)),
               ),
             ],
           ),
@@ -393,10 +554,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  Widget _field(TextEditingController ctrl, String label, {int maxLines = 1}) {
+  Widget _field(TextEditingController ctrl, String label, {int maxLines = 1, bool isNumber = false}) {
     return TextField(
       controller: ctrl,
       maxLines: maxLines,
+      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      inputFormatters: isNumber ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))] : null,
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),
