@@ -1,8 +1,13 @@
+import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // NEW: Imported for number formatting
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 import '../providers/app_provider.dart';
 import '../models/models.dart';
 
@@ -18,6 +23,31 @@ class _InventoryScreenState extends State<InventoryScreen> {
   String _categoryFilter = 'All';
   static const _uuid = Uuid();
 
+  int _currentPage = 0;
+  static const int _itemsPerPage = 8;
+  
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
+
+  // --- NEW: Predefined Korean Supermarket Categories ---
+  static const List<String> _koreanCategories = [
+    'Ramen & Noodles',
+    'Kimchi & Banchan',
+    'Sauces & Condiments',
+    'Snacks & Sweets',
+    'Beverages & Tea',
+    'Rice & Grains',
+    'Produce (Fruits & Veggies)',
+    'Meat & Seafood',
+    'Frozen Foods',
+    'Refrigerated & Dairy',
+    'Seaweed & Sushi Supplies',
+    'Canned & Packaged Goods',
+    'Household & Kitchen',
+    'Health & Beauty',
+    'Other'
+  ];
+
   @override
   void dispose() {
     _searchCtrl.dispose();
@@ -25,8 +55,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   List<Product> _filtered(List<Product> all) {
-    var list = all;
+    var list = List<Product>.from(all);
     final q = _searchCtrl.text.toLowerCase();
+    
     if (q.isNotEmpty) {
       list = list.where((p) => 
         p.name.toLowerCase().contains(q) || 
@@ -36,7 +67,33 @@ class _InventoryScreenState extends State<InventoryScreen> {
     if (_categoryFilter != 'All') {
       list = list.where((p) => p.category == _categoryFilter).toList();
     }
+
+    if (_sortColumnIndex != null) {
+      list.sort((a, b) {
+        int cmp = 0;
+        switch (_sortColumnIndex) {
+          case 0: cmp = a.name.compareTo(b.name); break;
+          case 1: cmp = a.category.compareTo(b.category); break;
+          case 2: cmp = a.barcode.compareTo(b.barcode); break;
+          case 3: cmp = a.price.compareTo(b.price); break;
+          case 4: cmp = a.stock.compareTo(b.stock); break;
+          case 5: cmp = a.reorderLevel.compareTo(b.reorderLevel); break;
+          case 6: cmp = (a.expirationDate ?? '9999').compareTo(b.expirationDate ?? '9999'); break;
+          case 7: cmp = a.status.compareTo(b.status); break;
+        }
+        return _sortAscending ? cmp : -cmp;
+      });
+    }
+
     return list;
+  }
+
+  void _onSort(int columnIndex, bool ascending) {
+    setState(() {
+      _sortColumnIndex = columnIndex;
+      _sortAscending = ascending;
+      _currentPage = 0; 
+    });
   }
 
   List<String> _categories(List<Product> products) {
@@ -45,19 +102,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   void _showAddDialog(BuildContext ctx) {
-    _showProductDialog(ctx, null);
+    _showProductDialog(ctx, null, false);
   }
 
-  void _showEditDialog(BuildContext ctx, Product product) {
-    _showProductDialog(ctx, product);
+  void _showEditDialog(BuildContext ctx, Product product, bool isReadOnly) {
+    _showProductDialog(ctx, product, isReadOnly);
   }
 
-  // --- NEW: Smart Bulk Restock Feature ---
   void _showBulkRestockDialog(BuildContext ctx) {
     final provider = ctx.read<AppProvider>();
     final products = provider.getProducts();
-    
-    // Automatically find everything that is Low Stock or Out of Stock
     final lowStockProducts = products.where((p) => p.stock <= p.reorderLevel).toList();
 
     if (lowStockProducts.isEmpty) {
@@ -72,12 +126,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
       return;
     }
 
-    // Map to hold controllers for each product ID
     final Map<String, TextEditingController> qtyCtrls = {};
     for (var p in lowStockProducts) {
-      // Suggest ordering enough to comfortably exceed the reorder level
       int suggestedOrder = (p.reorderLevel * 2) - p.stock;
-      if (suggestedOrder < 20) suggestedOrder = 20; // Ensure at least 20 units are suggested
+      if (suggestedOrder < 20) suggestedOrder = 20; 
       qtyCtrls[p.id] = TextEditingController(text: suggestedOrder.toString());
     }
 
@@ -164,24 +216,18 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ElevatedButton.icon(
               onPressed: isProcessing ? null : () async {
                 setDialogState(() => isProcessing = true);
-                
-                // Loop through and update every item they provided a number for
                 for (var p in lowStockProducts) {
                   final qtyToAdd = int.tryParse(qtyCtrls[p.id]?.text ?? '0') ?? 0;
                   if (qtyToAdd > 0) {
                     p.stock += qtyToAdd;
                     p.updatedAt = DateTime.now().toIso8601String();
-                    
-                    // Clear the expiration status if it was expired, since this is fresh stock
                     if (p.status == 'Expired') {
                        p.expirationDate = null; 
                        p.autoDispose = false;
                     }
-                    
                     await provider.updateProduct(p);
                   }
                 }
-                
                 if (ctx.mounted) {
                   Navigator.pop(dialogCtx);
                   ScaffoldMessenger.of(ctx).showSnackBar(
@@ -205,28 +251,34 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  void _showProductDialog(BuildContext ctx, Product? product) {
+  void _showProductDialog(BuildContext ctx, Product? product, bool isReadOnly) {
     final nameCtrl = TextEditingController(text: product?.name ?? '');
-    final categoryCtrl = TextEditingController(text: product?.category ?? '');
     final priceCtrl = TextEditingController(text: product?.price.toString() ?? '');
     final stockCtrl = TextEditingController(text: product?.stock.toString() ?? '');
     final reorderCtrl = TextEditingController(text: product?.reorderLevel.toString() ?? '');
     final barcodeCtrl = TextEditingController(text: product?.barcode ?? '');
     final descCtrl = TextEditingController(text: product?.description ?? '');
     
-    // State variables for expiration
+    // Check if the product has a category that isn't in our predefined list (legacy data)
+    final dynamicCategories = List<String>.from(_koreanCategories);
+    if (product != null && !dynamicCategories.contains(product.category)) {
+      dynamicCategories.add(product.category);
+    }
+    
+    String selectedCategory = product?.category ?? dynamicCategories.first;
+    
     DateTime? selectedExpDate = product?.expirationDate != null 
-        ? DateTime.parse(product!.expirationDate!) 
-        : null;
+        ? DateTime.parse(product!.expirationDate!) : null;
     bool autoDispose = product?.autoDispose ?? false;
     
+    String? tempImagePath = product?.imagePath;
     String? err;
 
     showDialog(
       context: ctx,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (_, setDialogState) => AlertDialog(
-          title: Text(product == null ? 'Add Product' : 'Edit Product'),
+          title: Text(isReadOnly ? 'View Details' : (product == null ? 'Add Product' : 'Edit Product')),
           content: SizedBox(
             width: 400,
             child: SingleChildScrollView(
@@ -239,27 +291,81 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text(err!, style: const TextStyle(color: Colors.red)),
                     ),
-                  _field(nameCtrl, 'Product Name'),
+                  
+                  Center(
+                    child: Column(
+                      children: [
+                        if (tempImagePath != null && File(tempImagePath!).existsSync())
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(File(tempImagePath!), height: 120, width: 120, fit: BoxFit.cover),
+                          )
+                        else
+                          Container(
+                            height: 120, width: 120,
+                            decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8)),
+                            child: Icon(Icons.inventory, size: 50, color: Colors.grey[400]),
+                          ),
+                        const SizedBox(height: 8),
+                        if (!isReadOnly)
+                          TextButton.icon(
+                            onPressed: () async {
+                              final result = await FilePicker.pickFiles(type: FileType.image);
+                              if (result != null && result.files.single.path != null) {
+                                final appDir = await getApplicationDocumentsDirectory();
+                                final imagesDir = Directory('${appDir.path}/product_management_data/product_images');
+                                if (!await imagesDir.exists()) await imagesDir.create(recursive: true);
+                                
+                                final ext = path.extension(result.files.single.path!);
+                                final fileName = 'prod_${_uuid.v4()}$ext';
+                                final savedImage = await File(result.files.single.path!).copy('${imagesDir.path}/$fileName');
+                                
+                                setDialogState(() => tempImagePath = savedImage.path);
+                              }
+                            },
+                            icon: const Icon(Icons.add_a_photo, size: 16),
+                            label: const Text('Attach Image'),
+                          )
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  _field(nameCtrl, 'Product Name', readOnly: isReadOnly),
                   const SizedBox(height: 12),
-                  _field(categoryCtrl, 'Category'),
+                  
+                  // --- NEW: Category Dropdown ---
+                  isReadOnly
+                      ? _field(TextEditingController(text: selectedCategory), 'Category', readOnly: true)
+                      : DropdownButtonFormField<String>(
+                          value: selectedCategory,
+                          decoration: const InputDecoration(
+                            labelText: 'Category',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: dynamicCategories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                          onChanged: (v) => setDialogState(() => selectedCategory = v!),
+                        ),
+                  
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Expanded(child: _field(priceCtrl, 'Price', isNumber: true)),
+                      Expanded(child: _field(priceCtrl, 'Price', isNumber: true, readOnly: isReadOnly)),
                       const SizedBox(width: 12),
-                      Expanded(child: _field(stockCtrl, 'Stock', isNumber: true)),
+                      Expanded(child: _field(stockCtrl, 'Stock', isNumber: true, readOnly: isReadOnly)),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Expanded(child: _field(reorderCtrl, 'Reorder Level', isNumber: true)),
+                      Expanded(child: _field(reorderCtrl, 'Reorder Level', isNumber: true, readOnly: isReadOnly)),
                       const SizedBox(width: 12),
-                      Expanded(child: _field(barcodeCtrl, 'Barcode')),
+                      Expanded(child: _field(barcodeCtrl, 'Barcode', readOnly: isReadOnly)),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _field(descCtrl, 'Description', maxLines: 2),
+                  _field(descCtrl, 'Description', maxLines: 2, readOnly: isReadOnly),
                   
                   const SizedBox(height: 20),
                   const Divider(),
@@ -267,42 +373,41 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   const Text('Expiration & Spoilage', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   
-                  // Expiration Date Picker Row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(selectedExpDate == null 
                           ? 'No Expiration Date' 
                           : 'Expires: ${DateFormat.yMMMd().format(selectedExpDate!)}'),
-                      TextButton.icon(
-                        icon: const Icon(Icons.calendar_today, size: 18),
-                        label: Text(selectedExpDate == null ? 'Set Date' : 'Change Date'),
-                        onPressed: () async {
-                          final date = await showDatePicker(
-                            context: dialogCtx,
-                            initialDate: selectedExpDate ?? DateTime.now().add(const Duration(days: 30)),
-                            firstDate: DateTime.now().subtract(const Duration(days: 365)), 
-                            lastDate: DateTime.now().add(const Duration(days: 3650)),
-                          );
-                          if (date != null) {
-                            setDialogState(() => selectedExpDate = date);
-                          }
-                        },
-                      )
+                      if (!isReadOnly)
+                        TextButton.icon(
+                          icon: const Icon(Icons.calendar_today, size: 18),
+                          label: Text(selectedExpDate == null ? 'Set Date' : 'Change Date'),
+                          onPressed: () async {
+                            final date = await showDatePicker(
+                              context: dialogCtx,
+                              initialDate: selectedExpDate ?? DateTime.now().add(const Duration(days: 30)),
+                              firstDate: DateTime.now().subtract(const Duration(days: 365)), 
+                              lastDate: DateTime.now().add(const Duration(days: 3650)),
+                            );
+                            if (date != null) {
+                              setDialogState(() => selectedExpDate = date);
+                            }
+                          },
+                        )
                     ],
                   ),
                   
-                  // Auto-Dispose Toggle
                   SwitchListTile(
                     title: const Text('Auto-Dump Expired Stock', style: TextStyle(fontSize: 14)),
                     subtitle: const Text('Automatically sets stock to 0 when date passes', style: TextStyle(fontSize: 12)),
                     value: autoDispose,
                     contentPadding: EdgeInsets.zero,
-                    onChanged: selectedExpDate == null 
+                    onChanged: (selectedExpDate == null || isReadOnly)
                         ? null 
                         : (val) => setDialogState(() => autoDispose = val),
                   ),
-                  if (selectedExpDate != null)
+                  if (selectedExpDate != null && !isReadOnly)
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
@@ -318,60 +423,70 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final name = nameCtrl.text.trim();
-                final category = categoryCtrl.text.trim();
-                final price = double.tryParse(priceCtrl.text);
-                final stock = int.tryParse(stockCtrl.text);
-                final reorder = int.tryParse(reorderCtrl.text);
-                if (name.isEmpty || category.isEmpty) {
-                  setDialogState(() => err = 'Name and category are required');
-                  return;
-                }
-                if (price == null || stock == null || reorder == null) {
-                  setDialogState(() => err = 'Price, stock, reorder must be valid numbers');
-                  return;
-                }
-                
-                final now = DateTime.now().toIso8601String();
-                
-                if (product == null) {
-                  ctx.read<AppProvider>().addProduct(Product(
-                        id: _uuid.v4(),
-                        name: name,
-                        category: category,
-                        price: price,
-                        stock: stock,
-                        reorderLevel: reorder,
-                        createdAt: now,
-                        updatedAt: now,
-                        barcode: barcodeCtrl.text.trim(),
-                        description: descCtrl.text.trim(),
-                        expirationDate: selectedExpDate?.toIso8601String(),
-                        autoDispose: autoDispose,
-                      ));
-                } else {
-                  product.name = name;
-                  product.category = category;
-                  product.price = price;
-                  product.stock = stock;
-                  product.reorderLevel = reorder;
-                  product.barcode = barcodeCtrl.text.trim();
-                  product.description = descCtrl.text.trim();
-                  product.updatedAt = now;
-                  product.expirationDate = selectedExpDate?.toIso8601String();
-                  product.autoDispose = autoDispose;
-                  ctx.read<AppProvider>().updateProduct(product);
-                }
-                Navigator.pop(dialogCtx);
-              },
-              child: Text(product == null ? 'Add' : 'Save'),
-            ),
+            if (!isReadOnly)
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel'),
+              ),
+            if (isReadOnly)
+              ElevatedButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Close'),
+              )
+            else
+              ElevatedButton(
+                onPressed: () {
+                  final name = nameCtrl.text.trim();
+                  final category = selectedCategory; // <-- Saved from dropdown
+                  final price = double.tryParse(priceCtrl.text);
+                  final stock = int.tryParse(stockCtrl.text);
+                  final reorder = int.tryParse(reorderCtrl.text);
+                  
+                  if (name.isEmpty) {
+                    setDialogState(() => err = 'Product name is required');
+                    return;
+                  }
+                  if (price == null || stock == null || reorder == null) {
+                    setDialogState(() => err = 'Price, stock, reorder must be valid numbers');
+                    return;
+                  }
+                  
+                  final now = DateTime.now().toIso8601String();
+                  
+                  if (product == null) {
+                    ctx.read<AppProvider>().addProduct(Product(
+                          id: _uuid.v4(),
+                          name: name,
+                          category: category,
+                          price: price,
+                          stock: stock,
+                          reorderLevel: reorder,
+                          createdAt: now,
+                          updatedAt: now,
+                          barcode: barcodeCtrl.text.trim(),
+                          description: descCtrl.text.trim(),
+                          expirationDate: selectedExpDate?.toIso8601String(),
+                          autoDispose: autoDispose,
+                          imagePath: tempImagePath, 
+                        ));
+                  } else {
+                    product.name = name;
+                    product.category = category;
+                    product.price = price;
+                    product.stock = stock;
+                    product.reorderLevel = reorder;
+                    product.barcode = barcodeCtrl.text.trim();
+                    product.description = descCtrl.text.trim();
+                    product.updatedAt = now;
+                    product.expirationDate = selectedExpDate?.toIso8601String();
+                    product.autoDispose = autoDispose;
+                    product.imagePath = tempImagePath; 
+                    ctx.read<AppProvider>().updateProduct(product);
+                  }
+                  Navigator.pop(dialogCtx);
+                },
+                child: Text(product == null ? 'Add' : 'Save'),
+              ),
           ],
         ),
       ),
@@ -401,10 +516,23 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final products = context.watch<AppProvider>().getProducts();
+    final provider = context.watch<AppProvider>();
+    final currentUser = provider.currentUser;
+    final isEmployee = currentUser?.role == 'Employee'; 
+
+    final products = provider.getProducts();
     final filtered = _filtered(products);
     final categories = _categories(products);
     final fmt = NumberFormat.currency(symbol: '\$');
+
+    final totalPages = (filtered.length / _itemsPerPage).ceil();
+    if (_currentPage >= totalPages && totalPages > 0) {
+      _currentPage = totalPages - 1; 
+    }
+    
+    final paginatedProducts = filtered.isNotEmpty 
+        ? filtered.skip(_currentPage * _itemsPerPage).take(_itemsPerPage).toList()
+        : <Product>[];
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -413,7 +541,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
@@ -430,122 +558,167 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                       ),
-                      onChanged: (_) => setState(() {}),
+                      onChanged: (_) {
+                        setState(() => _currentPage = 0); 
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
                   DropdownButton<String>(
                     value: _categoryFilter,
                     items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                    onChanged: (v) => setState(() => _categoryFilter = v ?? 'All'),
+                    onChanged: (v) {
+                      setState(() {
+                        _categoryFilter = v ?? 'All';
+                        _currentPage = 0; 
+                      });
+                    },
                   ),
                   const SizedBox(width: 16),
                   
-                  // --- NEW: The Bulk Restock Button ---
-                  OutlinedButton.icon(
-                    onPressed: () => _showBulkRestockDialog(context),
-                    icon: const Icon(Icons.inventory_outlined),
-                    label: const Text('Bulk Restock'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.orange[700],
-                      side: BorderSide(color: Colors.orange[700]!),
+                  if (!isEmployee) ...[
+                    OutlinedButton.icon(
+                      onPressed: () => _showBulkRestockDialog(context),
+                      icon: const Icon(Icons.inventory_outlined),
+                      label: const Text('Bulk Restock'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange[700],
+                        side: BorderSide(color: Colors.orange[700]!),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  
-                  ElevatedButton.icon(
-                    onPressed: () => _showAddDialog(context),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Product'),
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[700],
-                        foregroundColor: Colors.white),
-                  ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => _showAddDialog(context),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Product'),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue[700],
+                          foregroundColor: Colors.white),
+                    ),
+                  ]
                 ],
               ),
               const SizedBox(height: 16),
- Expanded(
+              
+              Expanded(
                 child: SingleChildScrollView(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                      child: DataTable(
-                        headingRowColor: WidgetStateProperty.all(const Color(0xFF1E293B)),
-                        columns: const [
-                          DataColumn(label: Text('Name', style:TextStyle(color: Colors.white))),
-                          DataColumn(label: Text('Category', style:TextStyle(color: Colors.white))),
-                          DataColumn(label: Text('Barcode', style:TextStyle(color: Colors.white))),    // Added Barcode Column
-                          DataColumn(label: Text('Price', style:TextStyle(color: Colors.white))),
-                          DataColumn(label: Text('Stock', style:TextStyle(color: Colors.white))),
-                          DataColumn(label: Text('Reorder', style:TextStyle(color: Colors.white))),
-                          DataColumn(label: Text('Expiration', style:TextStyle(color: Colors.white))), // Added Expiration Column
-                          DataColumn(label: Text('Status', style:TextStyle(color: Colors.white))),
-                          DataColumn(label: Text('Actions', style:TextStyle(color: Colors.white))),
-                        ],
-                        rows: filtered.map((p) {
-                          final status = p.status;
-                          final statusColor = status == 'Out of Stock' || status == 'Expired'
-                              ? Colors.red
-                              : status == 'Low Stock'
-                                  ? Colors.orange
-                                  : Colors.green;
-                          return DataRow(cells: [
-                            DataCell(Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                            DataCell(Text(p.category)),
-                            // Barcode Cell
-                            DataCell(Text(p.barcode.isEmpty ? 'N/A' : p.barcode, style: const TextStyle(fontFamily: 'monospace'))),
-                            DataCell(Text(fmt.format(p.price))),
-                            DataCell(Text('${p.stock}')),
-                            DataCell(Text('${p.reorderLevel}')),
-                            // Expiration Date Cell
-                            DataCell(Text(
-                              p.expirationDate != null 
-                                  ? DateFormat.yMMMd().format(DateTime.parse(p.expirationDate!)) 
-                                  : 'N/A',
-                              style: TextStyle(
-                                color: p.status == 'Expired' ? Colors.red : Colors.black87,
-                                fontWeight: p.status == 'Expired' ? FontWeight.bold : FontWeight.normal,
-                              ),
-                            )),
-                            DataCell(Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: statusColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(status,
-                                  style: TextStyle(
-                                      color: statusColor,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600)),
-                            )),
-                            DataCell(Row(
-                              mainAxisSize: MainAxisSize.min,
+                  scrollDirection: Axis.horizontal,
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    child: DataTable(
+                      sortColumnIndex: _sortColumnIndex,
+                      sortAscending: _sortAscending,
+                      headingRowColor: WidgetStateProperty.all(const Color(0xFF1E293B)),
+                      columns: [
+                        DataColumn(label: const Text('Name', style:TextStyle(color: Colors.white)), onSort: _onSort),
+                        DataColumn(label: const Text('Category', style:TextStyle(color: Colors.white)), onSort: _onSort),
+                        DataColumn(label: const Text('Barcode', style:TextStyle(color: Colors.white)), onSort: _onSort),    
+                        DataColumn(label: const Text('Price', style:TextStyle(color: Colors.white)), onSort: _onSort, numeric: true),
+                        DataColumn(label: const Text('Stock', style:TextStyle(color: Colors.white)), onSort: _onSort, numeric: true),
+                        DataColumn(label: const Text('Reorder', style:TextStyle(color: Colors.white)), onSort: _onSort, numeric: true),
+                        DataColumn(label: const Text('Expiration', style:TextStyle(color: Colors.white)), onSort: _onSort),
+                        DataColumn(label: const Text('Status', style:TextStyle(color: Colors.white)), onSort: _onSort),
+                        const DataColumn(label: Text('Actions', style:TextStyle(color: Colors.white))),
+                      ],
+                      rows: paginatedProducts.map((p) {
+                        final status = p.status;
+                        final statusColor = status == 'Out of Stock' || status == 'Expired'
+                            ? Colors.red
+                            : status == 'Low Stock'
+                                ? Colors.orange
+                                : Colors.green;
+                        return DataRow(cells: [
+                          DataCell(
+                            Row(
                               children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 18),
-                                  onPressed: () => _showEditDialog(context, p),
-                                  tooltip: 'Edit',
-                                ),
+                                if (p.imagePath != null && File(p.imagePath!).existsSync())
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 8.0),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Image.file(File(p.imagePath!), width: 30, height: 30, fit: BoxFit.cover),
+                                    ),
+                                  )
+                                else
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 8.0),
+                                    child: Icon(Icons.image_not_supported, size: 30, color: Colors.grey),
+                                  ),
+                                Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                              ],
+                            )
+                          ),
+                          DataCell(Text(p.category)),
+                          DataCell(Text(p.barcode.isEmpty ? 'N/A' : p.barcode, style: const TextStyle(fontFamily: 'monospace'))),
+                          DataCell(Text(fmt.format(p.price))),
+                          DataCell(Text('${p.stock}')),
+                          DataCell(Text('${p.reorderLevel}')),
+                          DataCell(Text(
+                            p.expirationDate != null 
+                                ? DateFormat.yMMMd().format(DateTime.parse(p.expirationDate!)) 
+                                : 'N/A',
+                            style: TextStyle(
+                              color: p.status == 'Expired' ? Colors.red : Colors.black87,
+                              fontWeight: p.status == 'Expired' ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          )),
+                          DataCell(Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: statusColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(status,
+                                style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600)),
+                          )),
+                          DataCell(Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(isEmployee ? Icons.visibility : Icons.edit_outlined, color: Colors.blue, size: 18),
+                                onPressed: () => _showEditDialog(context, p, isEmployee),
+                                tooltip: isEmployee ? 'View Details' : 'Edit',
+                              ),
+                              if (!isEmployee)
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
                                   onPressed: () => _deleteProduct(context, p),
                                   tooltip: 'Delete',
                                 ),
-                              ],
-                            )),
-                          ]);
-                        }).toList(),
-                      ),
+                            ],
+                          )),
+                        ]);
+                      }).toList(),
                     ),
                   ),
                 ),
               ),
+              
               Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text('${filtered.length} of ${products.length} products',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                padding: const EdgeInsets.only(top: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Showing ${filtered.isEmpty ? 0 : (_currentPage * _itemsPerPage) + 1} - ${min((_currentPage + 1) * _itemsPerPage, filtered.length)} of ${filtered.length} products',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.chevron_left),
+                          onPressed: _currentPage > 0 ? () => setState(() => _currentPage--) : null,
+                        ),
+                        Text('Page ${_currentPage + 1} of ${totalPages > 0 ? totalPages : 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        IconButton(
+                          icon: const Icon(Icons.chevron_right),
+                          onPressed: _currentPage < totalPages - 1 ? () => setState(() => _currentPage++) : null,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -554,16 +727,19 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  Widget _field(TextEditingController ctrl, String label, {int maxLines = 1, bool isNumber = false}) {
+  Widget _field(TextEditingController ctrl, String label, {int maxLines = 1, bool isNumber = false, bool readOnly = false}) {
     return TextField(
       controller: ctrl,
       maxLines: maxLines,
+      enabled: !readOnly,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
       inputFormatters: isNumber ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))] : null,
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),
         isDense: true,
+        filled: readOnly,
+        fillColor: readOnly ? Colors.grey[100] : null,
       ),
     );
   }

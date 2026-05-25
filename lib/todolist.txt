@@ -16,21 +16,22 @@ May 18, 2026 (DONE)
 - Help module, also redo the UI and add FAQ, USER GUIDES and CONTACT SUPPORT  (done)
 
  - - -- - - - - - -/ - -- - - - - - - - - - - - - - - - - - - - - - / - - - - - - - - - - - - - - - -
-ISSUES: 
+ISSUES: 95% done when finished
 - since the application resets after 60 seconds the notifications comebacks again (non-issue)
 - no search in sales module (done)
 - if stock goes to 0 due to sales purchase, it returns a null for some reason even tho di dapat (done)
 - Customize application to conform to GiYummy Design (done)
+- Employee roles shouldnt be able to edit inventory and add bulk restock (done)
+- when click by admin or manager the edit product, there is an option where we can attach image to the edit product (done)
+- make sure that whenever your role is employee the inventory tab the only action is view details (done)
+- Add sorting algorithms I forgot lmao (done)
+- Category is still not defined, make it drop down button where every korean product is categoirzed (done)
 
 
 - report module sales trend 
-- Category is still not defined, make it drop down button where every korean product is categoirzed
-- Add sorting algorithms I forgot lmao 
-
-- Employee roles shouldnt be able to edit inventory and add bulk restock
 - Modify profile, usermanagemnet and login to include employeeID
 - Help module know where send us a message go
-- Help module make each user guide clickable to view more indepth guide
+- Help module make each user guide clickable to view more indepth guide (done)
 - make audit log to be scrollable through selection of pages 
 - fix excel shit output
-- 
+

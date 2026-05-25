@@ -9,8 +9,9 @@ class Product {
   String description;
   String createdAt;
   String updatedAt;
-  String? expirationDate; // NEW: Optional expiration date
-  bool autoDispose;       // NEW: Automatically dump stock if expired
+  String? expirationDate; 
+  bool autoDispose;       
+  String? imagePath; // <--- NEW: Stores the local file path to the product image
 
   Product({
     required this.id,
@@ -25,12 +26,12 @@ class Product {
     required this.updatedAt,
     this.expirationDate,
     this.autoDispose = false,
+    this.imagePath, // <--- NEW
   });
 
   String get status {
     if (expirationDate != null && stock > 0) {
       final exp = DateTime.parse(expirationDate!);
-      // If the current date is after the expiration date
       if (DateTime.now().isAfter(exp)) return 'Expired';
     }
     if (stock <= 0) return 'Out of Stock';
@@ -52,6 +53,7 @@ class Product {
       updatedAt: json['updatedAt'] as String? ?? DateTime.now().toIso8601String(),
       expirationDate: json['expirationDate'] as String?,
       autoDispose: json['autoDispose'] == 1 || json['autoDispose'] == true,
+      imagePath: json['imagePath'] as String?, // <--- NEW
     );
   }
 
@@ -68,7 +70,8 @@ class Product {
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'expirationDate': expirationDate,
-      'autoDispose': autoDispose ? 1 : 0, // Convert to SQLite integer
+      'autoDispose': autoDispose ? 1 : 0, 
+      'imagePath': imagePath, // <--- NEW
     };
   }
 }

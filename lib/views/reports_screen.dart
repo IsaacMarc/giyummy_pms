@@ -2,12 +2,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:csv/csv.dart';
+import 'package:excel/excel.dart' as ex; // NEW: Excel Package
 import 'package:file_picker/file_picker.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../providers/app_provider.dart';
 import '../models/models.dart';
-import '../widgets/stat_card.dart'; // NEW: Imported the KPI Card widget
+import '../widgets/stat_card.dart'; 
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -113,29 +113,57 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return data;
   }
 
-  // --- CSV Export Logic ---
+  // --- EXCEL EXPORT LOGIC ---
 
-  Future<void> _exportToCSV(List<Map<String, dynamic>> reportData) async {
+  // Helper to dynamically convert Dart types to Excel Cell Values
+  ex.CellValue _getCellValue(dynamic value) {
+    if (value is String) return ex.TextCellValue(value);
+    if (value is int) return ex.IntCellValue(value);
+    if (value is double) return ex.DoubleCellValue(value);
+    return ex.TextCellValue(value.toString());
+  }
+
+  Future<void> _exportCurrentToExcel(List<Map<String, dynamic>> reportData) async {
     if (reportData.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No data to export.')));
       return;
     }
-    List<List<dynamic>> csvRows = [];
-    csvRows.add(reportData.first.keys.toList());
-    for (var row in reportData) {
-      csvRows.add(row.values.toList());
+
+    var excel = ex.Excel.createExcel();
+    String sheetName = _reportType.replaceAll(' ', '');
+    var sheet = excel[sheetName];
+    excel.setDefaultSheet(sheetName);
+
+    // 1. Add Headers
+    List<ex.CellValue> headers = reportData.first.keys.map((k) => ex.TextCellValue(k)).toList();
+    sheet.appendRow(headers);
+
+    // 2. Bold the Headers for organization
+    for (int col = 0; col < headers.length; col++) {
+      var cell = sheet.cell(ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 0));
+      cell.cellStyle = ex.CellStyle(bold: true);
     }
-    String csvString = const ListToCsvConverter().convert(csvRows);
+
+    // 3. Add Data
+    for (var row in reportData) {
+      sheet.appendRow(row.values.map((v) => _getCellValue(v)).toList());
+    }
+
+    // 4. Save Excel File
+    var fileBytes = excel.save();
+    if (fileBytes == null) return;
+
     String? outputFile = await FilePicker.saveFile(
-      dialogTitle: 'Save Report as CSV',
-      fileName: '${_reportType.replaceAll(' ', '_')}_${_timeFilter.replaceAll(' ', '_')}.csv',
+      dialogTitle: 'Save Report as Excel',
+      fileName: '${_reportType.replaceAll(' ', '_')}_${_timeFilter.replaceAll(' ', '_')}.xlsx',
       type: FileType.custom,
-      allowedExtensions: ['csv'],
+      allowedExtensions: ['xlsx'],
     );
+
     if (outputFile != null) {
       try {
         final file = File(outputFile);
-        await file.writeAsString(csvString);
+        await file.writeAsBytes(fileBytes);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Report exported to $outputFile'), backgroundColor: Colors.green),
@@ -149,49 +177,60 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  // NEW: Flattened Raw Data Export
-  Future<void> _exportAllRawDataToCSV(List<Sale> filteredSales, List<Product> products) async {
+  Future<void> _exportAllRawDataToExcel(List<Sale> filteredSales, List<Product> products) async {
     if (filteredSales.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No data to export.')));
       return;
     }
 
-    List<List<dynamic>> csvRows = [];
-    csvRows.add([
-      'Date', 'Cashier', 'Payment Method', 'Product Category', 'Product Name', 'Quantity', 'Unit Price', 'Subtotal', 'Transaction Discount', 'Transaction Total'
-    ]);
+    var excel = ex.Excel.createExcel();
+    var sheet = excel['Raw Sales Data'];
+    excel.setDefaultSheet('Raw Sales Data');
 
+    // 1. Add Detailed Headers
+    List<String> headerNames = ['Date', 'Cashier', 'Payment Method', 'Product Category', 'Product Name', 'Quantity', 'Unit Price', 'Subtotal', 'Transaction Discount', 'Transaction Total'];
+    sheet.appendRow(headerNames.map((h) => ex.TextCellValue(h)).toList());
+
+    // 2. Bold the Headers
+    for (int col = 0; col < headerNames.length; col++) {
+      var cell = sheet.cell(ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 0));
+      cell.cellStyle = ex.CellStyle(bold: true);
+    }
+
+    // 3. Flatten and Inject all Data
     for (var sale in filteredSales) {
       for (var item in sale.items) {
         final prod = products.firstWhere((p) => p.id == item.productId, orElse: () => products.first);
-        csvRows.add([
-          sale.timestamp,
-          sale.cashierName,
-          sale.paymentMethod,
-          prod.category,
-          item.productName,
-          item.quantity,
-          item.price,
-          item.subtotal,
-          sale.discount,
-          sale.finalTotal
+        sheet.appendRow([
+          ex.TextCellValue(sale.timestamp),
+          ex.TextCellValue(sale.cashierName),
+          ex.TextCellValue(sale.paymentMethod),
+          ex.TextCellValue(prod.category),
+          ex.TextCellValue(item.productName),
+          ex.IntCellValue(item.quantity),
+          ex.DoubleCellValue(item.price),
+          ex.DoubleCellValue(item.subtotal),
+          ex.DoubleCellValue(sale.discount),
+          ex.DoubleCellValue(sale.finalTotal)
         ]);
       }
     }
 
-    String csvString = const ListToCsvConverter().convert(csvRows);
+    // 4. Save Excel File
+    var fileBytes = excel.save();
+    if (fileBytes == null) return;
 
     String? outputFile = await FilePicker.saveFile(
-      dialogTitle: 'Save All Data as CSV',
-      fileName: 'All_Sales_Data_${_timeFilter.replaceAll(' ', '_')}.csv',
+      dialogTitle: 'Save All Data as Excel',
+      fileName: 'All_Sales_Data_${_timeFilter.replaceAll(' ', '_')}.xlsx',
       type: FileType.custom,
-      allowedExtensions: ['csv'],
+      allowedExtensions: ['xlsx'],
     );
 
     if (outputFile != null) {
       try {
         final file = File(outputFile);
-        await file.writeAsString(csvString);
+        await file.writeAsBytes(fileBytes);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('All data exported to $outputFile'), backgroundColor: Colors.green),
@@ -214,7 +253,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (_reportType == 'Sales Trend') {
       return LineChart(
         LineChartData(
-          // 1. NEW: Custom line chart tooltips that show the Date instead of index!
           lineTouchData: LineTouchData(
             touchTooltipData: LineTouchTooltipData(
               getTooltipColor: (touchedSpot) => Colors.blueGrey[800]!,
@@ -226,7 +264,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                     children: [
                       TextSpan(
-                        text: '\₱${spot.y.toStringAsFixed(2)}',
+                        text: '\$${spot.y.toStringAsFixed(2)}',
                         style: const TextStyle(color: Colors.greenAccent, fontSize: 13),
                       ),
                     ],
@@ -265,7 +303,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             return PieChartSectionData(
               color: color,
               value: e.value['Revenue'] as double,
-              title: '${e.value['Category']}\n\₱${(e.value['Revenue'] as double).toStringAsFixed(0)}',
+              title: '${e.value['Category']}\n\$${(e.value['Revenue'] as double).toStringAsFixed(0)}',
               radius: 80,
               titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
             );
@@ -278,7 +316,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final top10Data = data.take(10).toList(); 
     return BarChart(
       BarChartData(
-        // 2. NEW: Custom Bar chart tooltips that pull the String name from the data map!
         barTouchData: BarTouchData(
           touchTooltipData: BarTouchTooltipData(
             getTooltipColor: (group) => Colors.blueGrey[800]!,
@@ -329,9 +366,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     final filteredSales = _getFilteredSales(allSales);
     final reportData = _generateReportData(filteredSales, allProducts);
-    final fmt = NumberFormat.currency(symbol: '\₱');
+    final fmt = NumberFormat.currency(symbol: '\$');
 
-    // --- NEW: Calculate KPIs for the active Time Filter ---
     double totalRevenue = 0.0;
     int totalItemsSold = 0;
     for (var s in filteredSales) {
@@ -380,17 +416,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                       const SizedBox(width: 12),
                       
-                      // NEW: Dual Export Buttons
+                      // NEW: Styled Excel Export Buttons
                       OutlinedButton.icon(
-                        onPressed: () => _exportAllRawDataToCSV(filteredSales, allProducts),
-                        icon: const Icon(Icons.download_outlined),
-                        label: const Text('Export All Data'),
-                        style: OutlinedButton.styleFrom(foregroundColor: Colors.green[700]),
+                        onPressed: () => _exportAllRawDataToExcel(filteredSales, allProducts),
+                        icon: const Icon(Icons.grid_on),
+                        label: const Text('Export All (Excel)'),
+                        style: OutlinedButton.styleFrom(foregroundColor: Colors.green[800]),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton.icon(
-                        onPressed: () => _exportToCSV(reportData),
-                        icon: const Icon(Icons.view_list),
+                        onPressed: () => _exportCurrentToExcel(reportData),
+                        icon: const Icon(Icons.table_chart),
                         label: const Text('Export Current'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green[700],
@@ -401,7 +437,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ),
                   const SizedBox(height: 24),
                   
-                  // Row 2: NEW System Statistics Cards dynamically tied to the time filter
+                  // Row 2: Statistics Cards 
                   Row(
                     children: [
                       Expanded(

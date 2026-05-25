@@ -62,13 +62,19 @@ class StorageService {
   }
 
   Future<void> saveProduct(Product product) async {
-    final db = await DatabaseService.instance.database;
-    await db.insert(
-      'products',
-      product.toJson(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
+      final db = await DatabaseService.instance.database;
+      
+      try {
+        await db.execute("ALTER TABLE products ADD COLUMN imagePath TEXT");
+      } catch (_) {
+      }
+      
+      await db.insert(
+        'products',
+        product.toJson(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
 
   Future<void> deleteProduct(String id) async {
     final db = await DatabaseService.instance.database;
