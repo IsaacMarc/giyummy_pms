@@ -18,6 +18,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 void _showUserDialog(BuildContext context, [User? user]) {
     final isEditing = user != null;
     
+    // --- NEW: Added the 4 new controllers ---
+    final empIdCtrl = TextEditingController(text: user?.employeeId ?? '');
+    final fNameCtrl = TextEditingController(text: user?.firstName ?? '');
+    final miCtrl = TextEditingController(text: user?.middleInitial ?? '');
+    final lNameCtrl = TextEditingController(text: user?.lastName ?? '');
+    
     final usernameCtrl = TextEditingController(text: user?.username ?? '');
     final emailCtrl = TextEditingController(text: user?.email ?? '');
     final phoneCtrl = TextEditingController(text: user?.phone ?? '');
@@ -34,7 +40,7 @@ void _showUserDialog(BuildContext context, [User? user]) {
         builder: (_, setDialogState) => AlertDialog(
           title: Text(isEditing ? 'Edit User: ${user.username}' : 'Add New User'),
           content: SizedBox(
-            width: 400,
+            width: 450, // Made slightly wider to accommodate the name row
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -46,6 +52,24 @@ void _showUserDialog(BuildContext context, [User? user]) {
                       child: Text(_error!, style: const TextStyle(color: Colors.red)),
                     ),
                   
+                  // --- NEW: Personal Details Row ---
+                  Row(
+                    children: [
+                      Expanded(flex: 3, child: TextField(controller: fNameCtrl, decoration: const InputDecoration(labelText: 'First Name', border: OutlineInputBorder(), isDense: true))),
+                      const SizedBox(width: 8),
+                      Expanded(flex: 1, child: TextField(controller: miCtrl, decoration: const InputDecoration(labelText: 'M.I.', border: OutlineInputBorder(), isDense: true))),
+                      const SizedBox(width: 8),
+                      Expanded(flex: 3, child: TextField(controller: lNameCtrl, decoration: const InputDecoration(labelText: 'Last Name', border: OutlineInputBorder(), isDense: true))),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  TextField(controller: empIdCtrl, decoration: const InputDecoration(labelText: 'Employee ID', border: OutlineInputBorder(), isDense: true)),
+                  const SizedBox(height: 12),
+                  const Divider(),
+                  const SizedBox(height: 12),
+
+                  // System Credentials
                   TextField(
                     controller: usernameCtrl,
                     enabled: !isEditing,
@@ -59,7 +83,6 @@ void _showUserDialog(BuildContext context, [User? user]) {
                   ),
                   const SizedBox(height: 12),
 
-                  // FIX: Password field is now ALWAYS visible for Admins
                   TextField(
                     controller: passCtrl,
                     obscureText: true,
@@ -163,17 +186,26 @@ void _showUserDialog(BuildContext context, [User? user]) {
                     isActive: isActive,
                     department: deptCtrl.text.trim(),
                     phone: phoneCtrl.text.trim(),
+                    // --- NEW: Injecting the edited fields into the User object ---
+                    employeeId: empIdCtrl.text.trim(),
+                    firstName: fNameCtrl.text.trim(),
+                    middleInitial: miCtrl.text.trim(),
+                    lastName: lNameCtrl.text.trim(),
                   );
-                  // FIX: Pass the new password to the provider if they typed one
                   await provider.updateUser(updatedUser, newPassword: passCtrl.text.trim());
                 } else {
+                  // --- NEW: Added the 4 missing parameters to the create call ---
                   final err = await provider.adminAddUser(
                     username, 
                     emailCtrl.text.trim(), 
                     passCtrl.text, 
                     selectedRole, 
                     deptCtrl.text.trim(), 
-                    phoneCtrl.text.trim()
+                    phoneCtrl.text.trim(),
+                    empIdCtrl.text.trim(),
+                    fNameCtrl.text.trim(),
+                    miCtrl.text.trim(),
+                    lNameCtrl.text.trim(),
                   );
                   if (err != null) {
                     setDialogState(() => _error = err);
@@ -263,89 +295,61 @@ void _showUserDialog(BuildContext context, [User? user]) {
                           child: DataTable(
                             headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
                             columns: const [
-                              DataColumn(label: Text('Username')),
-                              DataColumn(label: Text('Role')),
-                              DataColumn(label: Text('Department')),
-                              DataColumn(label: Text('Contact')),
-                              DataColumn(label: Text('Status')),
-                              DataColumn(label: Text('Last Login')),
-                              DataColumn(label: Text('Actions')),
-                            ],
+                        DataColumn(label: Text('Emp ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Username', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Role', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Department', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                      ],
                             rows: users.map((u) {
-                              final isSelf = u.id == currentUserId;
-                              final loginTime = u.lastLogin != null
-                                  ? DateFormat('MMM dd, yyyy HH:mm').format(DateTime.parse(u.lastLogin!))
-                                  : 'Never';
+                        // --- NEW: Smartly combine the names into one clean string ---
+                        final fullName = [u.firstName, u.middleInitial, u.lastName]
+                            .where((s) => s.isNotEmpty)
+                            .join(' ');
 
-                              return DataRow(cells: [
-                                DataCell(
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(u.username, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                      if (isSelf) ...[
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(color: Colors.blue[100], borderRadius: BorderRadius.circular(4)),
-                                          child: const Text('You', style: TextStyle(fontSize: 10, color: Colors.blue)),
-                                        )
-                                      ]
-                                    ],
-                                  ),
+                        return DataRow(cells: [
+                          // --- NEW: Add the Emp ID and Full Name Cells ---
+                          DataCell(Text(
+                            u.employeeId.isEmpty ? 'N/A' : u.employeeId, 
+                            style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.blueGrey)
+                          )),
+                          DataCell(Text(fullName.isEmpty ? 'Not Set' : fullName)),
+                          // -----------------------------------------------
+                          
+                          DataCell(Text(u.username)),
+                          DataCell(Text(u.role)), 
+                          DataCell(Text(u.department)),
+                          
+                          // Your existing status badge
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: u.isActive ? Colors.green[50] : Colors.red[50],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                u.isActive ? 'Active' : 'Deactivated',
+                                style: TextStyle(
+                                  color: u.isActive ? Colors.green[700] : Colors.red[700], 
+                                  fontSize: 12, 
+                                  fontWeight: FontWeight.bold
                                 ),
-                                DataCell(Text(u.role, style: TextStyle(
-                                    fontWeight: u.role == 'Admin' ? FontWeight.bold : FontWeight.normal,
-                                    color: u.role == 'Admin' ? Colors.purple[700] : Colors.black87))),
-                                DataCell(Text(u.department.isEmpty ? '-' : u.department)),
-                                DataCell(Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    if (u.email.isNotEmpty) Text(u.email, style: const TextStyle(fontSize: 12)),
-                                    if (u.phone.isNotEmpty) Text(u.phone, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                    if (u.email.isEmpty && u.phone.isEmpty) const Text('-')
-                                  ],
-                                )),
-                                DataCell(
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: u.isActive ? Colors.green[50] : Colors.red[50],
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: u.isActive ? Colors.green[200]! : Colors.red[200]!),
-                                    ),
-                                    child: Text(
-                                      u.isActive ? 'Active' : 'Deactivated',
-                                      style: TextStyle(color: u.isActive ? Colors.green[700] : Colors.red[700], fontSize: 12),
-                                    ),
-                                  ),
-                                ),
-                                DataCell(Text(loginTime, style: const TextStyle(fontSize: 13))),
-                                DataCell(
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 18),
-                                        tooltip: 'Edit User',
-                                        onPressed: () => _showUserDialog(context, u),
-                                      ),
-                                      if (!isSelf)
-                                        IconButton(
-                                          icon: Icon(
-                                            u.isActive ? Icons.block : Icons.check_circle_outline,
-                                            color: u.isActive ? Colors.red : Colors.green,
-                                            size: 18,
-                                          ),
-                                          tooltip: u.isActive ? 'Deactivate' : 'Reactivate',
-                                          onPressed: () => provider.toggleUserStatus(u.id),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ]);
-                            }).toList(),
+                              ),
+                            ),
+                          ),
+                          // Your existing edit button
+                          DataCell(
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
+                              onPressed: () => _showUserDialog(context, u),
+                              tooltip: 'Edit User',
+                            ),
+                          ),
+                        ]);
+                      }).toList(),
                           ),
                         ),
                       ),

@@ -7,20 +7,28 @@ class User {
   final String createdAt;
   String? lastLogin;
   bool isActive;
-  String department; // Added
-  String phone;      // Added
+  String department;
+  String phone;     
+  final String employeeId;
+  final String firstName;
+  final String middleInitial;
+  final String lastName;
 
   User({
-    required this.id,
+   required this.id,
     required this.username,
     required this.passwordHash,
     required this.role,
     required this.email,
     required this.createdAt,
     this.lastLogin,
-    this.isActive = true, // Default to true
-    this.department = '', // Default to empty string
-    this.phone = '',      // Default to empty string
+    this.isActive = true,
+    this.department = '',
+    this.phone = '',
+    this.employeeId = '',
+    this.firstName = '',
+    this.middleInitial = '',
+    this.lastName = '',
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -29,13 +37,16 @@ class User {
       username: json['username'] as String,
       passwordHash: json['passwordHash'] as String,
       role: json['role'] as String,
-      email: json['email'] as String? ?? '',
+      email: json['email'] as String,
       createdAt: json['createdAt'] as String,
       lastLogin: json['lastLogin'] as String?,
-      // SQLite stores booleans as 1 or 0, so we check if it equals 1 or true
       isActive: json['isActive'] == 1 || json['isActive'] == true,
       department: json['department'] as String? ?? '',
       phone: json['phone'] as String? ?? '',
+      employeeId: json['employeeId'] as String? ?? '',
+      firstName: json['firstName'] as String? ?? '',
+      middleInitial: json['middleInitial'] as String? ?? '',
+      lastName: json['lastName'] as String? ?? '',
     );
   }
 
@@ -48,9 +59,13 @@ class User {
       'email': email,
       'createdAt': createdAt,
       'lastLogin': lastLogin,
-      'isActive': isActive ? 1 : 0, // Convert to SQLite integer format
+      'isActive': isActive ? 1 : 0,
       'department': department,
       'phone': phone,
+      'employeeId': employeeId,
+      'firstName': firstName,
+      'middleInitial': middleInitial,
+      'lastName': lastName,
     };
   }
 }

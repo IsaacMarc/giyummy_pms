@@ -38,13 +38,24 @@ class StorageService {
 
   Future<void> saveUser(User user) async {
     final db = await DatabaseService.instance.database;
+    
+    // Safely add the new columns for older databases
+    final newColumns = ['employeeId', 'firstName', 'middleInitial', 'lastName'];
+    for (var col in newColumns) {
+      try {
+        await db.execute("ALTER TABLE users ADD COLUMN $col TEXT DEFAULT ''");
+      } catch (_) {
+        // Ignore if column already exists
+      }
+    }
+
     final map = user.toJson();
-    map['isActive'] = user.isActive ? 1 : 0; // SQLite doesn't have booleans
+    map['isActive'] = user.isActive ? 1 : 0; 
 
     await db.insert(
       'users',
       map,
-      conflictAlgorithm: ConflictAlgorithm.replace, // Updates if ID exists
+      conflictAlgorithm: ConflictAlgorithm.replace, 
     );
   }
 

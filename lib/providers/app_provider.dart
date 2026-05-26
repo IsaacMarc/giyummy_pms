@@ -350,9 +350,8 @@ Future<void> restoreSession() async {
     await _addAuditLog('DELETE', 'Users', 'Deleted user: ${user.username}');
   }
 
-  // --- NEW: Admin User Controls ---
-  Future<String?> adminAddUser(String username, String email, String password, String role, String department, String phone) async {
-    // Check if username is taken
+  //Admin modify user
+  Future<String?> adminAddUser(String username, String email, String password, String role, String department, String phone, String empId, String fName, String mi, String lName) async {
     if (_users.any((u) => u.username.toLowerCase() == username.toLowerCase())) {
       return 'Username already exists';
     }
@@ -367,6 +366,10 @@ Future<void> restoreSession() async {
       department: department, 
       phone: phone,
       isActive: true,
+      employeeId: empId,
+      firstName: fName,
+      middleInitial: mi,
+      lastName: lName,
     );
     
     _users.add(newUser);

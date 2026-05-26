@@ -10,204 +10,132 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _usernameCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
+  final _empIdCtrl = TextEditingController();
+  final _fNameCtrl = TextEditingController();
+  final _miCtrl = TextEditingController();
+  final _lNameCtrl = TextEditingController();
+  final _userCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
-  String? _error;
-  String? _success;
-  bool _obscure = true;
-  bool _obscureConfirm = true;
   
-  bool _loading = false; 
+  String? _error;
+  bool _isLoading = false;
 
-  @override
-  void dispose() {
-    _usernameCtrl.dispose();
-    _emailCtrl.dispose();
-    _passwordCtrl.dispose();
-    _confirmCtrl.dispose();
-    super.dispose();
-  }
-
-  void _register() async { 
-    if (_passwordCtrl.text != _confirmCtrl.text) {
-      setState(() => _error = 'Passwords do not match');
+  void _setupSuperAdmin() async {
+    if (_userCtrl.text.isEmpty || _passCtrl.text.isEmpty || _fNameCtrl.text.isEmpty || _lNameCtrl.text.isEmpty) {
+      setState(() => _error = 'Please fill out all required fields.');
+      return;
+    }
+    if (_passCtrl.text != _confirmCtrl.text) {
+      setState(() => _error = 'Passwords do not match.');
       return;
     }
 
-    setState(() {
-      _error = null;
-      _loading = true; // This will now work perfectly
-    });
+    setState(() => _isLoading = true);
+    
+    final provider = context.read<AppProvider>();
+    final err = await provider.adminAddUser(
+      _userCtrl.text.trim(), 
+      '', // email
+      _passCtrl.text, 
+      'Admin', // FORCED ROLE
+      'Administration', // default department
+      '', // phone
+      _empIdCtrl.text.trim(),
+      _fNameCtrl.text.trim(),
+      _miCtrl.text.trim(),
+      _lNameCtrl.text.trim(),
+    );
 
-    // Await the database registration
-    final err = await context.read<AppProvider>().register(
-          _usernameCtrl.text.trim(),
-          _emailCtrl.text.trim(),
-          _passwordCtrl.text,
-        );
-
-    if (!mounted) return;
-
-    // Update state synchronously
-    setState(() {
-      _error = err;
-      _loading = false;
-    });
-
-   if (err == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registration successful! Please login.')),
-      );
-      
-      context.read<AppProvider>().navigateTo('login');
+    if (err != null) {
+      setState(() {
+        _error = err;
+        _isLoading = false;
+      });
+    } else {
+      // Auto-login the new super admin
+      await provider.login(_userCtrl.text.trim(), _passCtrl.text);
     }
   }
-  
-  // ==========================================
-  // KEEP YOUR @override Widget build(...) BELOW 
-  // ==========================================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: Colors.grey[100],
       body: Center(
-        child: SingleChildScrollView(
-          child: Container(
-            width: 400,
-            padding: const EdgeInsets.all(40),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Create Account',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'New accounts start as Employee role',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                ),
-                const SizedBox(height: 24),
-                if (_error != null)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
+        child: SizedBox(
+          width: 500,
+          child: Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.admin_panel_settings, size: 64, color: Colors.blue[800]),
+                  const SizedBox(height: 16),
+                  const Text('System Initialization', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                  const Text('Create the Super Admin account to begin.', style: TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 24),
+                  
+                  if (_error != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
                       color: Colors.red[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red[200]!),
+                      child: Text(_error!, style: TextStyle(color: Colors.red[800])),
                     ),
-                    child: Text(_error!,
-                        style:
-                            TextStyle(color: Colors.red[700], fontSize: 13)),
+
+                  Row(
+                    children: [
+                      Expanded(flex: 3, child: _field(_fNameCtrl, 'First Name *')),
+                      const SizedBox(width: 8),
+                      Expanded(flex: 1, child: _field(_miCtrl, 'M.I.')),
+                      const SizedBox(width: 8),
+                      Expanded(flex: 3, child: _field(_lNameCtrl, 'Last Name *')),
+                    ],
                   ),
-                if (_success != null)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.green[200]!),
+                  const SizedBox(height: 16),
+                  _field(_empIdCtrl, 'Employee ID / Badge Number'),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  _field(_userCtrl, 'Admin Username *'),
+                  const SizedBox(height: 16),
+                  _field(_passCtrl, 'Master Password *', isPassword: true),
+                  const SizedBox(height: 16),
+                  _field(_confirmCtrl, 'Confirm Password *', isPassword: true),
+                  const SizedBox(height: 32),
+                  
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _setupSuperAdmin,
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[800], foregroundColor: Colors.white),
+                      child: _isLoading 
+                          ? const CircularProgressIndicator(color: Colors.white) 
+                          : const Text('Initialize System', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
-                    child: Text(_success!,
-                        style:
-                            TextStyle(color: Colors.green[700], fontSize: 13)),
-                  ),
-                TextField(
-                  controller: _usernameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Username',
-                    prefixIcon: Icon(Icons.person_outline),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _emailCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _passwordCtrl,
-                  obscureText: _obscure,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscure
-                          ? Icons.visibility_off
-                          : Icons.visibility),
-                      onPressed: () =>
-                          setState(() => _obscure = !_obscure),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _confirmCtrl,
-                  obscureText: _obscureConfirm,
-                  decoration: InputDecoration(
-                    labelText: 'Confirm Password',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscureConfirm
-                          ? Icons.visibility_off
-                          : Icons.visibility),
-                      onPressed: () =>
-                          setState(() => _obscureConfirm = !_obscureConfirm),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: _success != null ? null : _register,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[700],
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: const Text('Create Account',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () =>
-                      context.read<AppProvider>().navigateTo('login'),
-                  child: const Text('Already have an account? Sign in'),
-                ),
-              ],
+                  )
+                ],
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _field(TextEditingController ctrl, String label, {bool isPassword = false}) {
+    return TextField(
+      controller: ctrl,
+      obscureText: isPassword,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        isDense: true,
       ),
     );
   }

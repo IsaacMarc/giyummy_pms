@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:product_management/views/register_screen.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
+import '../services/storage_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -23,6 +25,27 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  @override
+    void initState() {
+      super.initState();
+      _checkSystemInitialization();
+    }
+
+    Future<void> _checkSystemInitialization() async {
+      // 1. Ask the SQLite database directly to prevent the race condition
+      final users = await StorageService.instance.getUsers();
+      
+      if (!mounted) return;
+      
+      // 2. If it is TRULY empty on the hard drive, redirect to the Super Admin setup
+      if (users.isEmpty) {
+        Navigator.pushReplacement(
+          context, 
+          MaterialPageRoute(builder: (context) => const RegisterScreen())
+        );
+      }
+    }
+    
   void _login() async { // 1. Add 'async' to the main method
     
     // 2. Synchronously set the loading state so the spinner appears

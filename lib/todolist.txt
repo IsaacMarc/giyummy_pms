@@ -30,11 +30,10 @@ ISSUES: 95% done when finished
 - Help module make each user guide clickable to view more indepth guide (done)
 
 - report module sales trend 
-- modify register where it is only utilized as a super admin page when launching the application
-- Modify profile, usermanagemnet and login to include employeeID
+
+- modify register where it is only utilized as a super admin page when launching the application (done)
+- Modify profile, usermanagemnet and login to include employeeID (done)
+
 - Help module know where send us a message go 
 - audit log diseaspers after every log out, or application closed, make it that it doesnt, 
 - fix excel shit output
-
-- add in Profile
-- Add in User management (EmployeeID, FirstName, M.I, LastName)
