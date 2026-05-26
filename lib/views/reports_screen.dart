@@ -8,7 +8,9 @@ import 'package:fl_chart/fl_chart.dart';
 import '../providers/app_provider.dart';
 import '../models/models.dart';
 import '../widgets/stat_card.dart'; 
-
+import '../services/excel_service.dart';
+import '../providers/app_provider.dart';
+import 'package:provider/provider.dart';
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
 
@@ -415,24 +417,73 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      
-                      // NEW: Styled Excel Export Buttons
-                      OutlinedButton.icon(
-                        onPressed: () => _exportAllRawDataToExcel(filteredSales, allProducts),
-                        icon: const Icon(Icons.grid_on),
-                        label: const Text('Export All (Excel)'),
-                        style: OutlinedButton.styleFrom(foregroundColor: Colors.green[800]),
-                      ),
-                      const SizedBox(width: 8),
                       ElevatedButton.icon(
-                        onPressed: () => _exportCurrentToExcel(reportData),
-                        icon: const Icon(Icons.table_chart),
-                        label: const Text('Export Current'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
+                        icon: const Icon(Icons.download),
+                        label: const Text('Export to Excel'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
+                        onPressed: () async {
+                          // 1. Ask the user for the Timeframe using a dialog
+                          final String? selectedTimeframe = await showDialog<String>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Select Export Timeframe'),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ListTile(
+                                    leading: const Icon(Icons.today, color: Colors.blue),
+                                    title: const Text('Today'),
+                                    onTap: () => Navigator.pop(ctx, 'Today'),
+                                  ),
+                                  ListTile(
+                                    leading: const Icon(Icons.date_range, color: Colors.orange),
+                                    title: const Text('7 Days'),
+                                    onTap: () => Navigator.pop(ctx, '7 Days'),
+                                  ),
+                                  ListTile(
+                                    leading: const Icon(Icons.calendar_month, color: Colors.purple),
+                                    title: const Text('30 Days'),
+                                    onTap: () => Navigator.pop(ctx, '30 Days'),
+                                  ),
+                                  ListTile(
+                                    leading: const Icon(Icons.all_inclusive, color: Colors.green),
+                                    title: const Text('All Time'),
+                                    onTap: () => Navigator.pop(ctx, 'All Time'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+
+                          // If they clicked outside the dialog to cancel, stop here
+                          if (selectedTimeframe == null) return;
+
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Generating $selectedTimeframe Report...')),
+                          );
+
+                          // 2. Pass the selected timeframe into your new Excel Service
+                          final provider = context.read<AppProvider>();
+                          final error = await ExcelService.exportMasterReport(
+                            provider.getSales(), 
+                            provider.getProducts(), 
+                            selectedTimeframe // <--- Pass the choice here!
+                          );
+
+                          if (!context.mounted) return;
+                          
+                          if (error == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Report Saved Successfully!'), backgroundColor: Colors.green),
+                            );
+                          } else if (error != 'Cancelled by user') {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(error), backgroundColor: Colors.red),
+                            );
+                          }
+                        },
+                      )
                     ],
                   ),
                   const SizedBox(height: 24),

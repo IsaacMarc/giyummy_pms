@@ -22,6 +22,8 @@ dependencies:
   excel: ^4.0.6
   connectivity_plus: ^7.1.1
   mailer: ^7.1.0
+  syncfusion_flutter_xlsio: ^29.2.11
+  syncfusion_officechart: ^29.2.11
 
 dev_dependencies:
   flutter_test:

@@ -32,10 +32,9 @@ ISSUES: 95% done when finished
 - modify register where it is only utilized as a super admin page when launching the application (done)
 - Modify profile, usermanagemnet and login to include employeeID (done)
 - Help module know where send us a message go  (done)
-
+- In FAQ I want it users can search the integegrated questions (done)
 - report module sales trend 
 - fix excel shit output
+
 - no option yet for sales to print,
 - add a more detailed reciept
-- help module
-- In FAQ I want it users can search the integegrated questions

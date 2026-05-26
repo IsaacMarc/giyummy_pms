@@ -13,12 +13,15 @@ class HelpScreen extends StatefulWidget {
 class _HelpScreenState extends State<HelpScreen> {
   final _subjectCtrl = TextEditingController();
   final _messageCtrl = TextEditingController();
+  final _faqSearchCtrl = TextEditingController();
+  String _faqSearchQuery = '';
   bool _isSending = false;
 
   @override
   void dispose() {
     _subjectCtrl.dispose();
     _messageCtrl.dispose();
+    _faqSearchCtrl.dispose();
     super.dispose();
   }
 
@@ -346,26 +349,85 @@ ${_messageCtrl.text}
       },
     ];
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(24),
-      itemCount: faqs.length,
-      separatorBuilder: (_, __) => const Divider(),
-      itemBuilder: (ctx, i) {
-        return ExpansionTile(
-          iconColor: Colors.blue[700],
-          textColor: Colors.blue[900],
-          title: Text(faqs[i]['q']!, style: const TextStyle(fontWeight: FontWeight.w600)),
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(faqs[i]['a']!, style: TextStyle(color: Colors.grey[700], height: 1.5)),
+    final filteredFaqs = faqs.where((faq) {
+      final matchQ = faq['q']!.toLowerCase().contains(_faqSearchQuery);
+      final matchA = faq['a']!.toLowerCase().contains(_faqSearchQuery);
+      return matchQ || matchA; // Returns true if keyword is in Question OR Answer
+    }).toList();
+
+    return Column(
+      children: [
+        // --- SEARCH BAR UI ---
+        Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: TextField(
+            controller: _faqSearchCtrl,
+            onChanged: (val) {
+              setState(() => _faqSearchQuery = val.toLowerCase());
+            },
+            decoration: InputDecoration(
+              hintText: 'Search frequently asked questions...',
+              prefixIcon: const Icon(Icons.search, color: Colors.blue),
+              // Show a clear button only if they typed something
+              suffixIcon: _faqSearchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _faqSearchCtrl.clear();
+                        setState(() => _faqSearchQuery = '');
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: Colors.grey[50],
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
               ),
-            )
-          ],
-        );
-      },
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+            ),
+          ),
+        ),
+
+        // --- SEARCH RESULTS LIST ---
+        Expanded(
+          child: filteredFaqs.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
+                      const SizedBox(height: 16),
+                      Text('No FAQs match your search.', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+                    ],
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
+                  itemCount: filteredFaqs.length,
+                  separatorBuilder: (_, __) => const Divider(),
+                  itemBuilder: (ctx, i) {
+                    return ExpansionTile(
+                      iconColor: Colors.blue[700],
+                      textColor: Colors.blue[900],
+                      title: Text(filteredFaqs[i]['q']!, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(filteredFaqs[i]['a']!, style: TextStyle(color: Colors.grey[700], height: 1.5)),
+                          ),
+                        )
+                      ],
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
