@@ -26,12 +26,15 @@ ISSUES: 95% done when finished
 - make sure that whenever your role is employee the inventory tab the only action is view details (done)
 - Add sorting algorithms I forgot lmao (done)
 - Category is still not defined, make it drop down button where every korean product is categoirzed (done)
-
+- make audit log to be scrollable through selection of pages  (done)
+- Help module make each user guide clickable to view more indepth guide (done)
 
 - report module sales trend 
+- modify register where it is only utilized as a super admin page when launching the application
 - Modify profile, usermanagemnet and login to include employeeID
-- Help module know where send us a message go
-- Help module make each user guide clickable to view more indepth guide (done)
-- make audit log to be scrollable through selection of pages 
+- Help module know where send us a message go 
+- audit log diseaspers after every log out, or application closed, make it that it doesnt, 
 - fix excel shit output
 
+- add in Profile
+- Add in User management (EmployeeID, FirstName, M.I, LastName)

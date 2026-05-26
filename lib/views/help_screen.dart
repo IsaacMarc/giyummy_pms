@@ -28,10 +28,7 @@ class _HelpScreenState extends State<HelpScreen> {
     }
 
     setState(() => _isSending = true);
-    
-    // Simulate network delay
     await Future.delayed(const Duration(seconds: 1));
-    
     if (!mounted) return;
     
     setState(() {
@@ -63,10 +60,7 @@ class _HelpScreenState extends State<HelpScreen> {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        shape: BoxShape.circle,
-                      ),
+                      decoration: BoxDecoration(color: Colors.blue[50], shape: BoxShape.circle),
                       child: Icon(Icons.help_center, size: 40, color: Colors.blue[700]),
                     ),
                     const SizedBox(width: 24),
@@ -100,8 +94,8 @@ class _HelpScreenState extends State<HelpScreen> {
                         unselectedLabelColor: Colors.grey,
                         indicatorColor: Colors.blue,
                         tabs: [
-                          Tab(icon: Icon(Icons.question_answer_outlined), text: 'FAQ'),
                           Tab(icon: Icon(Icons.menu_book_outlined), text: 'User Guides'),
+                          Tab(icon: Icon(Icons.question_answer_outlined), text: 'FAQ'),
                           Tab(icon: Icon(Icons.support_agent_outlined), text: 'Contact Support'),
                         ],
                       ),
@@ -109,8 +103,8 @@ class _HelpScreenState extends State<HelpScreen> {
                     Expanded(
                       child: TabBarView(
                         children: [
-                          _buildFAQTab(),
                           _buildUserGuidesTab(),
+                          _buildFAQTab(),
                           _buildContactTab(),
                         ],
                       ),
@@ -125,7 +119,123 @@ class _HelpScreenState extends State<HelpScreen> {
     );
   }
 
-  // --- 1. FAQ TAB ---
+  // --- 1. USER GUIDES TAB (Now with all modules!) ---
+  Widget _buildUserGuidesTab() {
+    // Explicitly typed as List<Map<String, dynamic>> to prevent routing errors
+    final List<Map<String, dynamic>> guides = [
+      {
+        'icon': Icons.dashboard,
+        'title': 'Dashboard Overview',
+        'desc': 'Your daily snapshot of business performance and critical alerts.',
+        'definition': 'The Dashboard is the central hub of your POS System. It aggregates real-time data from all other modules to give you an immediate understanding of your store\'s health.',
+        'features': [
+          {'title': 'KPI Cards', 'detail': 'View total revenue, active users, and low stock items at a glance.'},
+          {'title': 'Recent Activity', 'detail': 'Monitor a live, scrollable feed of the most recent transactions.'},
+          {'title': 'Quick Alerts', 'detail': 'See immediate, color-coded warnings for expired or depleted inventory.'}
+        ]
+      },
+      {
+        'icon': Icons.point_of_sale,
+        'title': 'Sales & Checkout',
+        'desc': 'Complete guide to processing transactions and printing receipts.',
+        'definition': 'The Point of Sale interface is where cashiers process customer orders, handle payments, apply discounts, and generate final receipts.',
+        'features': [
+          {'title': 'Search & Scan', 'detail': 'Use the barcode scanner or the smart dropdown search to instantly find items.'},
+          {'title': 'Manage Cart', 'detail': 'Adjust quantities or remove items dynamically before finalizing the order.'},
+          {'title': 'Apply Discounts', 'detail': 'Enter a percentage discount that automatically applies to the entire subtotal.'},
+          {'title': 'Complete & Receipt', 'detail': 'Select the payment method. The system will log the sale and generate a detailed digital receipt.'}
+        ]
+      },
+      {
+        'icon': Icons.inventory_2,
+        'title': 'Inventory Management',
+        'desc': 'Managing stock levels, reorder points, and automated alerts.',
+        'definition': 'The Inventory module is the master database of all your products. It tracks current stock levels, pricing, category classifications, and expiration data.',
+        'features': [
+          {'title': 'Product Creation', 'detail': 'Add new products, set pricing, assign barcodes, and upload product images.'},
+          {'title': 'Reorder Levels', 'detail': 'Define a minimum stock threshold. If stock falls below this number, the system triggers a warning.'},
+          {'title': 'Auto-Dispose (Expiry)', 'detail': 'Assign expiration dates. The system will automatically set stock to 0 and alert you when an item expires.'},
+          {'title': 'Bulk Restock', 'detail': 'Click the Bulk Restock button to view all low-stock items and update delivery quantities in one click.'}
+        ]
+      },
+      {
+        'icon': Icons.bar_chart,
+        'title': 'System Reports',
+        'desc': 'Visualizing sales trends and exporting data to Excel.',
+        'definition': 'The Reports module is an advanced analytics engine that translates raw sales data into interactive visual charts and professional Excel workbooks.',
+        'features': [
+          {'title': 'Time Filters', 'detail': 'Use the dropdown to filter data by Today, Last 7 Days, or Last 30 Days.'},
+          {'title': 'Dynamic Charts', 'detail': 'Switch between Line Charts (Sales Trend), Pie Charts (Categories), and Bar Graphs (Top Performers).'},
+          {'title': 'Excel Exporting', 'detail': 'Export reports to native .xlsx files containing formatted Summary sheets and raw data tables.'}
+        ]
+      },
+      {
+        'icon': Icons.admin_panel_settings,
+        'title': 'User Management',
+        'desc': 'Managing employee roles and security credentials.',
+        'definition': 'The administrative control center for managing employee access, assigning system roles, and maintaining security protocols.',
+        'features': [
+          {'title': 'Role-Based Access', 'detail': 'Assign Admin, Manager, or Employee roles. Employees have restricted, read-only access to critical modules.'},
+          {'title': 'Account Status', 'detail': 'Instantly deactivate a user\'s account to revoke their system access.'},
+          {'title': 'Password Control', 'detail': 'Admins can securely overwrite and reset passwords for any employee.'}
+        ]
+      },
+      {
+        'icon': Icons.notifications_active,
+        'title': 'Alerts Engine',
+        'desc': 'Automated notification system for critical warnings.',
+        'definition': 'The Alerts Engine constantly monitors the database in the background, generating notifications to prevent stockouts and manage expired goods.',
+        'features': [
+          {'title': 'Low Stock Warnings', 'detail': 'Generated automatically when a product\'s inventory drops below its defined reorder level.'},
+          {'title': 'Expiration Notices', 'detail': 'Generated when the Auto-Dispose scanner detects a product has passed its expiration date.'},
+          {'title': 'Clear Notifications', 'detail': 'Alerts clear automatically when stock is replenished, or can be manually wiped using the "Clear All" tool.'}
+        ]
+      },
+      {
+        'icon': Icons.build,
+        'title': 'System Maintenance',
+        'desc': 'Creating and restoring local database backups.',
+        'definition': 'The Maintenance module handles data security by allowing you to create physical backup files of your entire database to prevent data loss.',
+        'features': [
+          {'title': 'Create Backups', 'detail': 'Generates a secure .json file containing all users, products, sales, and logs.'},
+          {'title': 'Restore Data', 'detail': 'If the system crashes, simply select a backup file from your computer to instantly rebuild the database.'}
+        ]
+      },
+    ];
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(24),
+      itemCount: guides.length,
+      itemBuilder: (ctx, i) {
+        return Card(
+          elevation: 1,
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            leading: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8)),
+              child: Icon(guides[i]['icon'] as IconData, color: Colors.blue[700]),
+            ),
+            title: Text(guides[i]['title'] as String, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Text(guides[i]['desc'] as String),
+            ),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+            onTap: () {
+              Navigator.push(
+                context, 
+                MaterialPageRoute(builder: (_) => _GuideDetailScreen(guide: guides[i]))
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  // --- 2. FAQ TAB ---
   Widget _buildFAQTab() {
     final faqs = [
       {
@@ -173,66 +283,6 @@ class _HelpScreenState extends State<HelpScreen> {
     );
   }
 
-  // --- 2. USER GUIDES TAB ---
-  Widget _buildUserGuidesTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('System Modules', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            childAspectRatio: 3,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            children: [
-              _guideCard(Icons.point_of_sale, 'Sales & Checkout', 'Learn how to scan barcodes, apply discounts, and generate receipts.'),
-              _guideCard(Icons.inventory_2, 'Inventory Management', 'Manage stock levels, barcodes, and spoilage tracking.'),
-              _guideCard(Icons.bar_chart, 'Dynamic Reports', 'Analyze sales trends and export data to CSV format.'),
-              _guideCard(Icons.admin_panel_settings, 'Access Control', 'Manage employee roles, deactivate accounts, and reset passwords.'),
-              _guideCard(Icons.build, 'System Maintenance', 'Create daily backups and restore data from hard drives.'),
-              _guideCard(Icons.notifications_active, 'Alert Engine', 'Configure low-stock thresholds and monitor critical warnings.'),
-            ],
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _guideCard(IconData icon, String title, String desc) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: Colors.blue[700], size: 28),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(height: 4),
-                Text(desc, style: TextStyle(color: Colors.grey[600], fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
   // --- 3. CONTACT SUPPORT TAB ---
   Widget _buildContactTab() {
     return SingleChildScrollView(
@@ -240,7 +290,6 @@ class _HelpScreenState extends State<HelpScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Left Side: Contact Info
           Expanded(
             flex: 1,
             child: Column(
@@ -259,8 +308,6 @@ class _HelpScreenState extends State<HelpScreen> {
             ),
           ),
           const SizedBox(width: 48),
-          
-          // Right Side: Ticket Form
           Expanded(
             flex: 2,
             child: Container(
@@ -280,21 +327,13 @@ class _HelpScreenState extends State<HelpScreen> {
                   const SizedBox(height: 20),
                   TextField(
                     controller: _subjectCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Subject',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
+                    decoration: const InputDecoration(labelText: 'Subject', border: OutlineInputBorder(), isDense: true),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _messageCtrl,
                     maxLines: 5,
-                    decoration: const InputDecoration(
-                      labelText: 'Describe your issue...',
-                      border: OutlineInputBorder(),
-                      alignLabelWithHint: true,
-                    ),
+                    decoration: const InputDecoration(labelText: 'Describe your issue...', border: OutlineInputBorder(), alignLabelWithHint: true),
                   ),
                   const SizedBox(height: 20),
                   SizedBox(
@@ -306,10 +345,7 @@ class _HelpScreenState extends State<HelpScreen> {
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.send),
                       label: Text(_isSending ? 'Sending...' : 'Submit Ticket'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[700],
-                        foregroundColor: Colors.white,
-                      ),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
                     ),
                   )
                 ],
@@ -335,6 +371,153 @@ class _HelpScreenState extends State<HelpScreen> {
           ],
         )
       ],
+    );
+  }
+}
+
+// ============================================================================
+// NEW: BEAUTIFUL DRILL-DOWN DETAIL SCREEN
+// ============================================================================
+class _GuideDetailScreen extends StatelessWidget {
+  final Map<String, dynamic> guide; // Set to dynamic to handle Strings and Lists
+  const _GuideDetailScreen({required this.guide});
+
+  @override
+  Widget build(BuildContext context) {
+    // Extract the list of features safely
+    final List<Map<String, String>> features = (guide['features'] as List<dynamic>)
+        .map((e) => Map<String, String>.from(e as Map))
+        .toList();
+
+    return Scaffold(
+      backgroundColor: Colors.grey[100],
+      appBar: AppBar(
+        title: const Text('Module Guide'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 1,
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // --- HEADER BANNER ---
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 48),
+              decoration: BoxDecoration(
+                color: Colors.blue[800],
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))]
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), shape: BoxShape.circle),
+                    child: Icon(guide['icon'] as IconData, size: 64, color: Colors.white),
+                  ),
+                  const SizedBox(width: 32),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(guide['title'] as String, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
+                        const SizedBox(height: 8),
+                        Text(guide['desc'] as String, style: TextStyle(fontSize: 16, color: Colors.blue[100])),
+                      ],
+                    ),
+                  )
+                ],
+              ),
+            ),
+            
+            // --- CONTENT BODY ---
+            Padding(
+              padding: const EdgeInsets.all(40.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Left Side: Definition & Overview
+                  Expanded(
+                    flex: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Module Overview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: Text(
+                            guide['definition'] as String,
+                            style: TextStyle(fontSize: 15, height: 1.6, color: Colors.grey[800]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(width: 48),
+                  
+                  // Right Side: Step-by-Step Features
+                  Expanded(
+                    flex: 2,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Key Features & Workflows', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                        const SizedBox(height: 16),
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: features.length,
+                          itemBuilder: (ctx, i) {
+                            return Card(
+                              elevation: 0,
+                              margin: const EdgeInsets.only(bottom: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: Colors.grey[300]!)
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(20.0),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 16,
+                                      backgroundColor: Colors.blue[100],
+                                      child: Text('${i + 1}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[800])),
+                                    ),
+                                    const SizedBox(width: 20),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(features[i]['title']!, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                          const SizedBox(height: 6),
+                                          Text(features[i]['detail']!, style: TextStyle(color: Colors.grey[700], height: 1.5)),
+                                        ],
+                                      ),
+                                    )
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        )
+                      ],
+                    ),
+                  )
+                ],
+              ),
+            )
+          ],
+        ),
+      ),
     );
   }
 }

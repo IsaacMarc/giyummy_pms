@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart'; // NEW: Imported the file picker
+import 'package:file_picker/file_picker.dart'; 
 import '../providers/app_provider.dart';
 import '../models/models.dart';
+import 'dart:math';
 
-class MaintenanceScreen extends StatelessWidget {
+class MaintenanceScreen extends StatefulWidget {
   const MaintenanceScreen({super.key});
+
+  @override
+  State<MaintenanceScreen> createState() => _MaintenanceScreenState();
+}
+
+class _MaintenanceScreenState extends State<MaintenanceScreen> {
+  static const int _itemsPerPage = 5;
+  int _currentPage = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -14,6 +23,16 @@ class MaintenanceScreen extends StatelessWidget {
     final logs = provider.getAuditLogs();
     final backups = provider.getBackups();
     final dtFmt = DateFormat('MMM d, y HH:mm:ss');
+    
+    final allLogs = context.watch<AppProvider>().getAuditLogs();
+    final totalPages = (allLogs.length / _itemsPerPage).ceil();
+    if (_currentPage >= totalPages && totalPages > 0) {
+      _currentPage = totalPages - 1; // Failsafe
+    }
+
+    final paginatedLogs = allLogs.isNotEmpty 
+        ? allLogs.skip(_currentPage * _itemsPerPage).take(_itemsPerPage).toList()
+        : <AuditLog>[];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -144,7 +163,7 @@ class MaintenanceScreen extends StatelessWidget {
                         DataColumn(label: Text('Module')),
                         DataColumn(label: Text('Details')),
                       ],
-                      rows: logs.map((log) {
+                      rows: paginatedLogs.map((log) {
                         DateTime? t;
                         try {
                           t = DateTime.parse(log.timestamp);
@@ -174,6 +193,29 @@ class MaintenanceScreen extends StatelessWidget {
                         child: Text('No audit logs yet.', style: TextStyle(color: Colors.grey[400])),
                       ),
                     ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Showing ${allLogs.isEmpty ? 0 : (_currentPage * _itemsPerPage) + 1} - ${min((_currentPage + 1) * _itemsPerPage, allLogs.length)} of ${allLogs.length} logs',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.chevron_left),
+                              onPressed: _currentPage > 0 ? () => setState(() => _currentPage--) : null,
+                            ),
+                            Text('Page ${_currentPage + 1} of ${totalPages > 0 ? totalPages : 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            IconButton(
+                              icon: const Icon(Icons.chevron_right),
+                              onPressed: _currentPage < totalPages - 1 ? () => setState(() => _currentPage++) : null,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -363,5 +405,6 @@ class MaintenanceScreen extends StatelessWidget {
         ),
       ),
     );
+    
   }
 }
