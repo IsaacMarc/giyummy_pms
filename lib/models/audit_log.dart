@@ -17,23 +17,27 @@ class AuditLog {
     required this.timestamp,
   });
 
-  factory AuditLog.fromJson(Map<String, dynamic> json) => AuditLog(
-        id: json['id'] as String,
-        userId: json['user_id'] as String,
-        username: json['username'] as String,
-        action: json['action'] as String,
-        module: json['module'] as String,
-        details: json['details'] as String,
-        timestamp: json['timestamp'] as String,
-      );
+  factory AuditLog.fromJson(Map<String, dynamic> json) {
+    return AuditLog(
+      id: json['id'] as String,
+      userId: json['userId'] as String, // <--- MUST BE camelCase
+      username: json['username'] as String,
+      action: json['action'] as String,
+      module: json['module'] as String,
+      details: json['details'] as String,
+      timestamp: json['timestamp'] as String,
+    );
+  }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'user_id': userId,
-        'username': username,
-        'action': action,
-        'module': module,
-        'details': details,
-        'timestamp': timestamp,
-      };
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'userId': userId, // <--- MUST BE camelCase
+      'username': username,
+      'action': action,
+      'module': module,
+      'details': details,
+      'timestamp': timestamp,
+    };
+  }
 }

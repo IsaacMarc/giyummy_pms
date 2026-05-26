@@ -523,7 +523,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final products = provider.getProducts();
     final filtered = _filtered(products);
     final categories = _categories(products);
-    final fmt = NumberFormat.currency(symbol: '\$');
+    final fmt = NumberFormat.currency(symbol: '\₱');
 
     final totalPages = (filtered.length / _itemsPerPage).ceil();
     if (_currentPage >= totalPages && totalPages > 0) {

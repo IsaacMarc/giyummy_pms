@@ -11,6 +11,9 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  late TextEditingController _fNameCtrl;
+  late TextEditingController _miCtrl;
+  late TextEditingController _lNameCtrl;
   late TextEditingController _emailCtrl;
   late TextEditingController _phoneCtrl;
   late TextEditingController _deptCtrl;
@@ -21,6 +24,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _fNameCtrl = TextEditingController();
+    _miCtrl = TextEditingController();
+    _lNameCtrl = TextEditingController();
     _emailCtrl = TextEditingController();
     _phoneCtrl = TextEditingController();
     _deptCtrl = TextEditingController();
@@ -28,6 +34,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
+    _fNameCtrl.dispose();
+    _miCtrl.dispose();
+    _lNameCtrl.dispose();
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
     _deptCtrl.dispose();
@@ -37,6 +46,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _updateProfile() async {
     final provider = context.read<AppProvider>();
     final err = await provider.updateProfile(
+      firstName: _fNameCtrl.text.trim(),
+      middleInitial: _miCtrl.text.trim(),
+      lastName: _lNameCtrl.text.trim(),
       email: _emailCtrl.text.trim(),
       phone: _phoneCtrl.text.trim(),
       department: _deptCtrl.text.trim(),
@@ -61,6 +73,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return const Center(child: Text('Please log in to view profile.'));
     }
 
+    // Populate controllers if they are empty
+    if (_fNameCtrl.text.isEmpty && user.firstName.isNotEmpty) _fNameCtrl.text = user.firstName;
+    if (_miCtrl.text.isEmpty && user.middleInitial.isNotEmpty) _miCtrl.text = user.middleInitial;
+    if (_lNameCtrl.text.isEmpty && user.lastName.isNotEmpty) _lNameCtrl.text = user.lastName;
     if (_emailCtrl.text.isEmpty && user.email.isNotEmpty) _emailCtrl.text = user.email;
     if (_phoneCtrl.text.isEmpty && user.phone.isNotEmpty) _phoneCtrl.text = user.phone;
     if (_deptCtrl.text.isEmpty && user.department.isNotEmpty) _deptCtrl.text = user.department;
@@ -70,8 +86,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ? DateFormat('MMMM dd, yyyy - hh:mm a').format(DateTime.parse(user.lastLogin!))
         : 'First Login';
 
+    // Safely construct the full name for the header
+    final fullName = [user.firstName, user.middleInitial, user.lastName]
+        .where((s) => s.isNotEmpty)
+        .join(' ');
+    final displayName = fullName.isNotEmpty ? fullName : user.username;
+
     return DefaultTabController(
-      length: 2, // FIX: Reduced to 2 tabs
+      length: 2, 
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -87,7 +109,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       radius: 40,
                       backgroundColor: Colors.blue[100],
                       child: Text(
-                        user.username.substring(0, 1).toUpperCase(),
+                        displayName.substring(0, 1).toUpperCase(),
                         style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue[800]),
                       ),
                     ),
@@ -97,10 +119,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            user.username,
+                            displayName,
                             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                           ),
-                          const SizedBox(height: 4),
+                          Text(
+                            '@${user.username}',
+                            style: TextStyle(fontSize: 14, color: Colors.grey[600], fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(height: 8),
                           Row(
                             children: [
                               Container(
@@ -120,6 +146,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               ),
                               const SizedBox(width: 12),
+                              if (user.employeeId.isNotEmpty) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.grey[300]!),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.badge, size: 14, color: Colors.grey[700]),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'ID: ${user.employeeId}',
+                                        style: TextStyle(color: Colors.grey[800], fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                              ],
                               Icon(Icons.business, size: 16, color: Colors.grey[600]),
                               const SizedBox(width: 4),
                               Text(user.department.isNotEmpty ? user.department : 'No Department', style: TextStyle(color: Colors.grey[700])),
@@ -165,11 +212,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               children: [
                                 const Text('Personal Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 8),
-                                Text('Update your contact details and internal department assignments.', style: TextStyle(color: Colors.grey[600])),
+                                Text('Update your name, contact details, and internal department assignments.', style: TextStyle(color: Colors.grey[600])),
                                 const SizedBox(height: 24),
                                 
                                 if (_overviewMsg != null) _statusBanner(_overviewMsg!, true),
                                 if (_overviewErr != null) _statusBanner(_overviewErr!, false),
+                                
+                                // --- NEW: Name Editing Row ---
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 3,
+                                      child: TextField(
+                                        controller: _fNameCtrl,
+                                        decoration: const InputDecoration(labelText: 'First Name', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person_outline)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      flex: 1,
+                                      child: TextField(
+                                        controller: _miCtrl,
+                                        decoration: const InputDecoration(labelText: 'M.I.', border: OutlineInputBorder()),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      flex: 3,
+                                      child: TextField(
+                                        controller: _lNameCtrl,
+                                        decoration: const InputDecoration(labelText: 'Last Name', border: OutlineInputBorder()),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
                                 
                                 Row(
                                   children: [
@@ -228,7 +305,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 const Divider(height: 32),
                                 _infoRow(Icons.login_outlined, 'Last Login', lastLoginStr, Colors.black87),
                                 const Divider(height: 32),
-                                _infoRow(Icons.badge_outlined, 'System Role', user.role, Colors.black87),
+                                _infoRow(Icons.badge_outlined, 'Employee ID', user.employeeId.isNotEmpty ? user.employeeId : 'Not Assigned', Colors.black87),
+                                const Divider(height: 32),
+                                _infoRow(Icons.admin_panel_settings_outlined, 'System Role', user.role, Colors.black87),
                               ],
                             ),
                           ),

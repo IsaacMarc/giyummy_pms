@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:mailer/mailer.dart';
+import 'package:mailer/smtp_server.dart';
 
 class HelpScreen extends StatefulWidget {
   const HelpScreen({super.key});
@@ -19,7 +22,7 @@ class _HelpScreenState extends State<HelpScreen> {
     super.dispose();
   }
 
-  void _sendMessage() async {
+void _sendMessage() async {
     if (_subjectCtrl.text.isEmpty || _messageCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill out all fields'), backgroundColor: Colors.red),
@@ -28,18 +31,85 @@ class _HelpScreenState extends State<HelpScreen> {
     }
 
     setState(() => _isSending = true);
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    
-    setState(() {
-      _isSending = false;
-      _subjectCtrl.clear();
-      _messageCtrl.clear();
-    });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Support request sent successfully!'), backgroundColor: Colors.green),
-    );
+    // 1. Internet Connectivity Check
+    try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final hasInternet = !connectivityResult.contains(ConnectivityResult.none);
+
+      if (!hasInternet) {
+        setState(() => _isSending = false);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No internet connection. Please check your network and try again.'), 
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      // Fallback for desktop environments where connectivity check might fail
+    }
+
+    // 2. Invisible Email Sending (SMTP)
+    try {
+      String systemEmail = 'qimgsantos@tip.edu.ph'; 
+      String appPassword = 'vjes ohev rzwj fftp'; 
+      
+      // Where you want the support tickets to actually be delivered
+      String supportInbox = 'isaacmarcussantos22@gmail.com'; 
+
+      final smtpServer = gmail(systemEmail, appPassword);
+
+      // Construct the email
+      final message = Message()
+        ..from = Address(systemEmail, 'GiYummy System Automated Ticket')
+        ..recipients.add(supportInbox)
+        ..subject = 'Support Ticket: ${_subjectCtrl.text}'
+        ..text = '''
+A new support ticket has been submitted from the POS System.
+
+Subject: ${_subjectCtrl.text}
+Time: ${DateTime.now().toString()}
+
+Message:
+${_messageCtrl.text}
+''';
+
+      // Send the email
+      await send(message, smtpServer);
+
+      if (!mounted) return;
+      
+      setState(() {
+        _isSending = false;
+        _subjectCtrl.clear();
+        _messageCtrl.clear();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Support request sent successfully!'), backgroundColor: Colors.green),
+      );
+
+    } on MailerException catch (e) {
+      print('Message not sent. \n${e.toString()}');
+      if (!mounted) return;
+      setState(() => _isSending = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to send message. Please try again later.'), 
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSending = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
@@ -235,28 +305,44 @@ class _HelpScreenState extends State<HelpScreen> {
     );
   }
 
-  // --- 2. FAQ TAB ---
+// ---  FAQ TAB ---
   Widget _buildFAQTab() {
     final faqs = [
       {
+        'q': 'Can I use this POS system offline?',
+        'a': 'Yes! Because the system uses a localized SQLite database, all core functions (Sales, Inventory, Alerts) work perfectly without an internet connection. Internet is only required to send Support Tickets or back up files to cloud services.'
+      },
+      {
+        'q': 'How do I process a refund or return?',
+        'a': 'Currently, returns must be handled administratively. An Admin can adjust the inventory stock manually to add the returned item back, and adjust the daily revenue records accordingly.'
+      },
+      {
         'q': 'How does the Auto-Dump feature work?',
-        'a': 'When adding a product to inventory, you can set an expiration date and toggle "Auto-Dump". A background scanner checks the database every 60 seconds. Once the expiration date passes, the system will automatically set that product\'s stock to 0 and generate a critical alert.'
+        'a': 'When adding a product, you can set an expiration date and toggle "Auto-Dump". A background scanner checks the database periodically. Once the date passes, the system will automatically set that product\'s stock to 0 and generate a critical alert.'
+      },
+      {
+        'q': 'How do I update product prices?',
+        'a': 'Navigate to the Inventory module, click the "Edit" (pencil) icon next to the product, type the new price, and hit Save. The new price will apply immediately to all future transactions.'
       },
       {
         'q': 'How do I export my data to Excel?',
-        'a': 'Navigate to the Reports module. You can use the "Export Current" button to save the currently viewed chart data, or the "Export All Data" button to generate a master CSV file of every transaction. CSV files open natively in Microsoft Excel and Google Sheets.'
+        'a': 'Navigate to the Reports module. Use "Export Current" to save the chart data you are currently viewing, or "Export All Data" to generate a master .xlsx workbook of every transaction for accounting purposes.'
       },
       {
         'q': 'Why is my dashboard alert not disappearing?',
-        'a': 'Alerts clear automatically when you replenish the stock of the triggering item. You can also manually dismiss them by clicking the "Read" button on the alert itself, or use the "Clear All" button in the Alerts module to wipe all notifications.'
+        'a': 'Stock alerts clear automatically when you restock the item. You can manually dismiss them by clicking the "Read" button on the alert, or use the "Clear All" button in the Alerts module.'
       },
       {
         'q': 'How do I restore my database if the computer crashes?',
-        'a': 'If you have been using the Maintenance module to create backups, simply click the "Restore from Computer" button in the Maintenance tab, select your saved .json backup file, and the system will instantly rebuild your entire database.'
+        'a': 'Click "Restore Backup" in the Maintenance tab, select your saved .json backup file from your computer, and the system will instantly overwrite the empty database with your saved data.'
       },
       {
         'q': 'Who is allowed to change passwords?',
-        'a': 'For security reasons, only users with the "Admin" role can change passwords. Admins can do this by navigating to the User Management module, clicking the edit (pencil) icon next to an account, and entering a new password.'
+        'a': 'Only users with the "Admin" role can reset passwords for other employees via the User Management module.'
+      },
+            {
+        'q': 'What happens if I forget my passowrd?',
+        'a': 'You must consult the Admin for a password reset if ever the case you ever lost or forget your password they can provide you with a new one.'
       },
     ];
 

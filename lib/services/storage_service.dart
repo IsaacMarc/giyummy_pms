@@ -100,15 +100,15 @@ class StorageService {
     final result = await db.query('audit_logs', orderBy: 'timestamp DESC');
     return result.map((json) => AuditLog.fromJson(json)).toList();
   }
-
+  
   Future<void> saveAuditLog(AuditLog log) async {
-    final db = await DatabaseService.instance.database;
-    await db.insert(
-      'audit_logs',
-      log.toJson(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
+      final db = await DatabaseService.instance.database;
+      await db.insert(
+        'audit_logs',
+        log.toJson(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
 
   // ─── Backups ──────────────────────────────────────────────────────
 

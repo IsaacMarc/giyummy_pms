@@ -28,6 +28,19 @@ class AppProvider extends ChangeNotifier {
   String get currentPage => _currentPage;
   bool get isLoggedIn => _currentUser != null;
 
+
+
+  Future<void> loadData() async {
+    // Your existing data fetching...
+    _users = await _storage.getUsers();
+    _products = await _storage.getProducts();
+    _sales = await _storage.getSales();
+    
+    // ---> ADD THIS MISSING LINE <---
+    _auditLogs = await _storage.getAuditLogs(); 
+    
+    notifyListeners();
+  }
   // ── Navigation ──────────────────────────────────────────────────────────────
 
   void navigateTo(String page) {
@@ -73,7 +86,8 @@ Future<void> restoreSession() async {
       _currentUser = user;
       _currentPage = 'dashboard';
       _storage.setCurrentUser(user);
-      
+
+      await loadData();
       // Instant UI response
       notifyListeners(); 
 
@@ -398,11 +412,21 @@ Future<void> restoreSession() async {
 
   // ── Profile ───────────────────────────────────────────────────────────────────
 
-  Future<String?> updateProfile({required String email, required String phone, required String department}) async {
+Future<String?> updateProfile({
+    required String firstName,
+    required String middleInitial,
+    required String lastName,
+    required String email, 
+    required String phone, 
+    required String department
+  }) async {
     if (_currentUser == null) return 'Not logged in';
     final idx = _users.indexWhere((u) => u.id == _currentUser!.id);
     if (idx < 0) return 'User not found';
     
+    _users[idx].firstName = firstName;
+    _users[idx].middleInitial = middleInitial;
+    _users[idx].lastName = lastName;
     _users[idx].email = email;
     _users[idx].phone = phone;
     _users[idx].department = department;
@@ -458,7 +482,7 @@ Future<void> restoreSession() async {
     );
     
     _auditLogs.add(log);
-    // await _storage.saveAuditLog(log);
+    await _storage.saveAuditLog(log);
   }
 
   Future<String> createBackup() async {

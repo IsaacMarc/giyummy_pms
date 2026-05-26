@@ -1,21 +1,23 @@
 class User {
-  final String id;
-  final String username;
+  final String id;          // Keep final (ID never changes)
+  final String username;    // Keep final (Username never changes)
   String passwordHash;
-  final String role; 
-  String email;
-  final String createdAt;
+  String role;              // Removed final so admins can change roles
+  String email;             // Removed final
+  final String createdAt;   // Keep final
   String? lastLogin;
   bool isActive;
-  String department;
-  String phone;     
-  final String employeeId;
-  final String firstName;
-  final String middleInitial;
-  final String lastName;
+  String department;        // Removed final
+  String phone;             // Removed final
+  
+  // --- NEW FIELDS (Removed 'final' so they can be edited) ---
+  String employeeId;
+  String firstName;
+  String middleInitial;
+  String lastName;
 
   User({
-   required this.id,
+    required this.id,
     required this.username,
     required this.passwordHash,
     required this.role,

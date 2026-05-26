@@ -190,12 +190,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () =>
-                      context.read<AppProvider>().navigateTo('register'),
-                  child: const Text("Don't have an account? Register"),
-                ),
-                const SizedBox(height: 24),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
