@@ -33,8 +33,9 @@ ISSUES: 95% done when finished
 - Modify profile, usermanagemnet and login to include employeeID (done)
 - Help module know where send us a message go  (done)
 - In FAQ I want it users can search the integegrated questions (done)
-- report module sales trend 
-- fix excel shit output
-
+- report module sales trend (done)
+- fix excel shit output (done)
+- everytime an report is created make sure it is put in audit log (done)
+- report screen are still in dollars sign, make sure convert to Peso
 - no option yet for sales to print,
 - add a more detailed reciept

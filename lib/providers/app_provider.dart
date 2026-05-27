@@ -467,6 +467,11 @@ Future<String?> updateProfile({
   }
   // ── Internal ─────────────────────────────────────────────────────────────────
 
+  Future<void> logExportReport(String timeframe) async {
+    await _addAuditLog('EXPORT', 'Reports', 'Generated Excel Report ($timeframe)');
+    notifyListeners(); // Instantly updates the UI if the Audit Log is open
+  }
+  
   Future<void> _addAuditLog(String action, String module, String details, [User? user]) async {
     final u = user ?? _currentUser;
     if (u == null) return;

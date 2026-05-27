@@ -1,16 +1,13 @@
-import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:excel/excel.dart' as ex; // NEW: Excel Package
-import 'package:file_picker/file_picker.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../providers/app_provider.dart';
 import '../models/models.dart';
 import '../widgets/stat_card.dart'; 
 import '../services/excel_service.dart';
-import '../providers/app_provider.dart';
-import 'package:provider/provider.dart';
+
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
 
@@ -115,137 +112,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return data;
   }
 
-  // --- EXCEL EXPORT LOGIC ---
-
-  // Helper to dynamically convert Dart types to Excel Cell Values
-  ex.CellValue _getCellValue(dynamic value) {
-    if (value is String) return ex.TextCellValue(value);
-    if (value is int) return ex.IntCellValue(value);
-    if (value is double) return ex.DoubleCellValue(value);
-    return ex.TextCellValue(value.toString());
-  }
-
-  Future<void> _exportCurrentToExcel(List<Map<String, dynamic>> reportData) async {
-    if (reportData.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No data to export.')));
-      return;
-    }
-
-    var excel = ex.Excel.createExcel();
-    String sheetName = _reportType.replaceAll(' ', '');
-    var sheet = excel[sheetName];
-    excel.setDefaultSheet(sheetName);
-
-    // 1. Add Headers
-    List<ex.CellValue> headers = reportData.first.keys.map((k) => ex.TextCellValue(k)).toList();
-    sheet.appendRow(headers);
-
-    // 2. Bold the Headers for organization
-    for (int col = 0; col < headers.length; col++) {
-      var cell = sheet.cell(ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 0));
-      cell.cellStyle = ex.CellStyle(bold: true);
-    }
-
-    // 3. Add Data
-    for (var row in reportData) {
-      sheet.appendRow(row.values.map((v) => _getCellValue(v)).toList());
-    }
-
-    // 4. Save Excel File
-    var fileBytes = excel.save();
-    if (fileBytes == null) return;
-
-    String? outputFile = await FilePicker.saveFile(
-      dialogTitle: 'Save Report as Excel',
-      fileName: '${_reportType.replaceAll(' ', '_')}_${_timeFilter.replaceAll(' ', '_')}.xlsx',
-      type: FileType.custom,
-      allowedExtensions: ['xlsx'],
-    );
-
-    if (outputFile != null) {
-      try {
-        final file = File(outputFile);
-        await file.writeAsBytes(fileBytes);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Report exported to $outputFile'), backgroundColor: Colors.green),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save file: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  Future<void> _exportAllRawDataToExcel(List<Sale> filteredSales, List<Product> products) async {
-    if (filteredSales.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No data to export.')));
-      return;
-    }
-
-    var excel = ex.Excel.createExcel();
-    var sheet = excel['Raw Sales Data'];
-    excel.setDefaultSheet('Raw Sales Data');
-
-    // 1. Add Detailed Headers
-    List<String> headerNames = ['Date', 'Cashier', 'Payment Method', 'Product Category', 'Product Name', 'Quantity', 'Unit Price', 'Subtotal', 'Transaction Discount', 'Transaction Total'];
-    sheet.appendRow(headerNames.map((h) => ex.TextCellValue(h)).toList());
-
-    // 2. Bold the Headers
-    for (int col = 0; col < headerNames.length; col++) {
-      var cell = sheet.cell(ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 0));
-      cell.cellStyle = ex.CellStyle(bold: true);
-    }
-
-    // 3. Flatten and Inject all Data
-    for (var sale in filteredSales) {
-      for (var item in sale.items) {
-        final prod = products.firstWhere((p) => p.id == item.productId, orElse: () => products.first);
-        sheet.appendRow([
-          ex.TextCellValue(sale.timestamp),
-          ex.TextCellValue(sale.cashierName),
-          ex.TextCellValue(sale.paymentMethod),
-          ex.TextCellValue(prod.category),
-          ex.TextCellValue(item.productName),
-          ex.IntCellValue(item.quantity),
-          ex.DoubleCellValue(item.price),
-          ex.DoubleCellValue(item.subtotal),
-          ex.DoubleCellValue(sale.discount),
-          ex.DoubleCellValue(sale.finalTotal)
-        ]);
-      }
-    }
-
-    // 4. Save Excel File
-    var fileBytes = excel.save();
-    if (fileBytes == null) return;
-
-    String? outputFile = await FilePicker.saveFile(
-      dialogTitle: 'Save All Data as Excel',
-      fileName: 'All_Sales_Data_${_timeFilter.replaceAll(' ', '_')}.xlsx',
-      type: FileType.custom,
-      allowedExtensions: ['xlsx'],
-    );
-
-    if (outputFile != null) {
-      try {
-        final file = File(outputFile);
-        await file.writeAsBytes(fileBytes);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('All data exported to $outputFile'), backgroundColor: Colors.green),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save file: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
   // --- Dynamic Chart Generator ---
   Widget _buildChart(List<Map<String, dynamic>> data) {
     if (data.isEmpty || (data.every((e) => e['Revenue'] == 0 && e['Quantity Sold'] == 0))) {
@@ -266,7 +132,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                     children: [
                       TextSpan(
-                        text: '\$${spot.y.toStringAsFixed(2)}',
+                        text: '\₱${spot.y.toStringAsFixed(2)}',
                         style: const TextStyle(color: Colors.greenAccent, fontSize: 13),
                       ),
                     ],
@@ -305,7 +171,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             return PieChartSectionData(
               color: color,
               value: e.value['Revenue'] as double,
-              title: '${e.value['Category']}\n\$${(e.value['Revenue'] as double).toStringAsFixed(0)}',
+              title: '${e.value['Category']}\n\₱${(e.value['Revenue'] as double).toStringAsFixed(0)}',
               radius: 80,
               titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
             );
@@ -368,7 +234,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     final filteredSales = _getFilteredSales(allSales);
     final reportData = _generateReportData(filteredSales, allProducts);
-    final fmt = NumberFormat.currency(symbol: '\$');
+    final fmt = NumberFormat.currency(symbol: '\₱');
 
     double totalRevenue = 0.0;
     int totalItemsSold = 0;
@@ -417,7 +283,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      ElevatedButton.icon(
+ElevatedButton.icon(
                         icon: const Icon(Icons.download),
                         label: const Text('Export to Excel'),
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
@@ -468,12 +334,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           final error = await ExcelService.exportMasterReport(
                             provider.getSales(), 
                             provider.getProducts(), 
-                            selectedTimeframe // <--- Pass the choice here!
+                            selectedTimeframe
                           );
 
                           if (!context.mounted) return;
                           
                           if (error == null) {
+                            // --- NEW: Log the successful export to the SQLite Audit Log ---
+                            await provider.logExportReport(selectedTimeframe);
+
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Report Saved Successfully!'), backgroundColor: Colors.green),
                             );
