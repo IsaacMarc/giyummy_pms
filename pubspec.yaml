@@ -24,6 +24,8 @@ dependencies:
   mailer: ^7.1.0
   syncfusion_flutter_xlsio: ^29.2.11
   syncfusion_officechart: ^29.2.11
+  pdf: ^3.12.0
+  printing: ^5.14.3
 
 dev_dependencies:
   flutter_test:

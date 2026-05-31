@@ -1,11 +1,12 @@
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../providers/app_provider.dart';
 import '../models/models.dart';
-import '../widgets/stat_card.dart'; 
 import '../services/excel_service.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -16,24 +17,21 @@ class ReportsScreen extends StatefulWidget {
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
-  String _reportType = 'Top Products';
-  String _timeFilter = 'Last 7 Days';
+  int _selectedTab = 0; // 0 = Sales, 1 = Inventory
+  String _dateRange = 'Last 7 Days';
   
-  final List<String> _reportTypes = ['Sales Trend', 'Top Products', 'Categories', 'Low Performers'];
-  final List<String> _timeFilters = ['Today', 'Last 7 Days', 'Last 30 Days'];
-
-  // --- Data Processing Logic ---
-
+  final double _dailyRevenueTarget = 5000.0;
+  // --- DATA FILTERING ---
   List<Sale> _getFilteredSales(List<Sale> allSales) {
     final now = DateTime.now();
     DateTime startDate;
 
-    if (_timeFilter == 'Today') {
-      startDate = DateTime(now.year, now.month, now.day);
-    } else if (_timeFilter == 'Last 7 Days') {
-      startDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7));
-    } else {
-      startDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 30));
+    switch (_dateRange) {
+      case 'Today': startDate = DateTime(now.year, now.month, now.day); break;
+      case 'Last 7 Days': startDate = now.subtract(const Duration(days: 7)); break;
+      case 'Last 30 Days': startDate = now.subtract(const Duration(days: 30)); break;
+      case 'Year to Date': startDate = DateTime(now.year, 1, 1); break;
+      default: startDate = now.subtract(const Duration(days: 7));
     }
 
     return allSales.where((s) {
@@ -42,188 +40,236 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }).toList();
   }
 
-  List<Map<String, dynamic>> _generateReportData(List<Sale> sales, List<Product> products) {
-    final data = <Map<String, dynamic>>[];
+// --- NEW: PURCHASE ORDER PDF EXPORT ---
+  Future<void> _exportPOToPDF(List<Product> itemsToOrder) async {
+    if (itemsToOrder.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Inventory is healthy. No PO needed!'), backgroundColor: Colors.green)
+      );
+      return;
+    }
 
-    if (_reportType == 'Sales Trend') {
-      final grouped = <String, double>{};
-      for (var s in sales) {
-        final date = s.timestamp.substring(0, 10);
-        grouped[date] = (grouped[date] ?? 0) + s.finalTotal;
-      }
-      var sortedKeys = grouped.keys.toList()..sort();
-      for (var key in sortedKeys) {
-        data.add({'Date': key, 'Revenue': grouped[key]});
-      }
+    final pdf = pw.Document();
+    final fmt = NumberFormat.currency(symbol: 'PHP ');
+    final now = DateTime.now();
 
-    } else if (_reportType == 'Top Products' || _reportType == 'Low Performers') {
-      final qtyMap = <String, int>{};
-      final revMap = <String, double>{};
+    double grandTotal = 0.0;
+    
+    // Map our low-stock items into rows for the PDF table
+    final tableData = itemsToOrder.map((p) {
+      int suggestedOrder = (p.reorderLevel * 2) - p.stock;
+      if (suggestedOrder < 20) suggestedOrder = 20; 
       
-      for (var p in products) {
-        qtyMap[p.id] = 0;
-        revMap[p.id] = 0.0;
-      }
+      final estUnitCost = p.price * 0.60; // Estimated 60% wholesale cost
+      final lineTotal = suggestedOrder * estUnitCost;
+      grandTotal += lineTotal;
 
-      for (var s in sales) {
-        for (var i in s.items) {
-          qtyMap[i.productId] = (qtyMap[i.productId] ?? 0) + i.quantity;
-          revMap[i.productId] = (revMap[i.productId] ?? 0) + i.subtotal;
-        }
-      }
+      return [
+        p.barcode.isEmpty ? 'N/A' : p.barcode,
+        p.name,
+        suggestedOrder.toString(),
+        fmt.format(estUnitCost),
+        fmt.format(lineTotal)
+      ];
+    }).toList();
 
-      for (var p in products) {
-        data.add({
-          'Product': p.name,
-          'Quantity Sold': qtyMap[p.id],
-          'Revenue': revMap[p.id],
-        });
-      }
-
-      if (_reportType == 'Top Products') {
-        data.sort((a, b) => (b['Quantity Sold'] as int).compareTo(a['Quantity Sold'] as int));
-      } else {
-        data.sort((a, b) => (a['Quantity Sold'] as int).compareTo(b['Quantity Sold'] as int));
-      }
-      if (data.length > 20) data.removeRange(20, data.length);
-
-    } else if (_reportType == 'Categories') {
-      final catRev = <String, double>{};
-      final catQty = <String, int>{};
-
-      for (var s in sales) {
-        for (var i in s.items) {
-          final prod = products.firstWhere((p) => p.id == i.productId, orElse: () => products.first);
-          final cat = prod.category;
-          catQty[cat] = (catQty[cat] ?? 0) + i.quantity;
-          catRev[cat] = (catRev[cat] ?? 0) + i.subtotal;
-        }
-      }
-
-      for (var cat in catRev.keys) {
-        data.add({
-          'Category': cat,
-          'Quantity Sold': catQty[cat],
-          'Revenue': catRev[cat],
-        });
-      }
-      data.sort((a, b) => (b['Revenue'] as double).compareTo(a['Revenue'] as double));
-    }
-    return data;
-  }
-
-  // --- Dynamic Chart Generator ---
-  Widget _buildChart(List<Map<String, dynamic>> data) {
-    if (data.isEmpty || (data.every((e) => e['Revenue'] == 0 && e['Quantity Sold'] == 0))) {
-      return Center(child: Text('Not enough data to display chart', style: TextStyle(color: Colors.grey[400])));
-    }
-
-    if (_reportType == 'Sales Trend') {
-      return LineChart(
-        LineChartData(
-          lineTouchData: LineTouchData(
-            touchTooltipData: LineTouchTooltipData(
-              getTooltipColor: (touchedSpot) => Colors.blueGrey[800]!,
-              getTooltipItems: (touchedSpots) {
-                return touchedSpots.map((spot) {
-                  final date = data[spot.x.toInt()]['Date'];
-                  return LineTooltipItem(
-                    '$date\n',
-                    const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    children: [
-                      TextSpan(
-                        text: '\₱${spot.y.toStringAsFixed(2)}',
-                        style: const TextStyle(color: Colors.greenAccent, fontSize: 13),
-                      ),
-                    ],
-                  );
-                }).toList();
-              },
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context context) {
+          return [
+            // PO Header
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('PURCHASE ORDER', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF1976D2))),
+                    pw.SizedBox(height: 4),
+                    pw.Text('PO Number: PO-${DateFormat('yyyyMMdd-HHmm').format(now)}'),
+                    pw.Text('Date: ${DateFormat.yMMMd().format(now)}'),
+                  ]
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('STORE SYSTEM', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Store Address Line 1'),
+                    pw.Text('Store Contact Info'),
+                  ]
+                ),
+              ]
             ),
-          ),
-          gridData: const FlGridData(show: true, drawVerticalLine: false),
-          titlesData: const FlTitlesData(
-            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), 
-          ),
-          borderData: FlBorderData(show: false),
-          lineBarsData: [
-            LineChartBarData(
-              spots: data.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value['Revenue'] as double)).toList(),
-              isCurved: true,
-              color: Colors.blue[700],
-              barWidth: 4,
-              belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.2)),
+            pw.SizedBox(height: 32),
+            
+            // To: Supplier (Placeholder for now)
+            pw.Text('TO SUPPLIER:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+            pw.Text('General Supplier / Distributor'),
+            pw.SizedBox(height: 24),
+            
+            // The Items Table
+            pw.TableHelper.fromTextArray(
+              headers: ['Barcode', 'Item Description', 'Qty Ordered', 'Est. Unit Cost', 'Line Total'],
+              data: tableData,
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF1A1F36)),
+              cellStyle: const pw.TextStyle(fontSize: 10),
+              rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.center,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.centerRight,
+              }
             ),
-          ],
-        ),
-      );
-    }
-
-    if (_reportType == 'Categories') {
-      return PieChart(
-        PieChartData(
-          sectionsSpace: 2,
-          centerSpaceRadius: 60,
-          sections: data.asMap().entries.map((e) {
-            final color = Colors.primaries[e.key % Colors.primaries.length];
-            return PieChartSectionData(
-              color: color,
-              value: e.value['Revenue'] as double,
-              title: '${e.value['Category']}\n\₱${(e.value['Revenue'] as double).toStringAsFixed(0)}',
-              radius: 80,
-              titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-            );
-          }).toList(),
-        ),
-      );
-    }
-
-    // Top Products & Low Performers (Bar Chart)
-    final top10Data = data.take(10).toList(); 
-    return BarChart(
-      BarChartData(
-        barTouchData: BarTouchData(
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (group) => Colors.blueGrey[800]!,
-            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              final productName = top10Data[group.x.toInt()]['Product'];
-              return BarTooltipItem(
-                '$productName\n',
-                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            pw.SizedBox(height: 24),
+            
+            // Grand Total
+            pw.Container(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Row(
+                mainAxisSize: pw.MainAxisSize.min,
                 children: [
-                  TextSpan(
-                    text: '${rod.toY.toInt()} sold',
-                    style: const TextStyle(color: Colors.yellowAccent, fontSize: 13),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(
-            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), 
-          ),
-        borderData: FlBorderData(show: false),
-        barGroups: top10Data.asMap().entries.map((e) {
-          return BarChartGroupData(
-            x: e.key,
-            barRods: [
-              BarChartRodData(
-                toY: (e.value['Quantity Sold'] as int).toDouble(),
-                color: _reportType == 'Top Products' ? Colors.green[600] : Colors.orange[600],
-                width: 20,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                  pw.Text('Estimated PO Total: ', style: const pw.TextStyle(fontSize: 14)),
+                  pw.Text(fmt.format(grandTotal), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                ]
               )
-            ],
-          );
-        }).toList(),
+            ),
+            pw.SizedBox(height: 40),
+            
+            // Signatures
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  children: [
+                    pw.Container(width: 150, height: 1, color: PdfColors.black),
+                    pw.SizedBox(height: 4),
+                    pw.Text('Authorized Signature'),
+                  ]
+                )
+              ]
+            )
+          ];
+        },
       ),
     );
+
+    // This opens the device's native print/save dialog!
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(), 
+      name: 'Purchase_Order_${DateFormat('yyyyMMdd').format(now)}.pdf'
+    );
+  }
+
+  // --- EXCEL EXPORT (Keeps your existing setup) ---
+  void _exportToExcel() async {
+    final provider = context.read<AppProvider>();
+    final error = await ExcelService.exportMasterReport(provider.getSales(), provider.getProducts(), _dateRange);
+    if (!mounted) return;
+    if (error == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Excel Report Saved!'), backgroundColor: Colors.green));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.red));
+    }
+  }
+
+// --- PDF EXPORT LOGIC ---
+  Future<void> _exportToPDF(List<Sale> sales, List<Product> products) async {
+    final pdf = pw.Document();
+    final fmt = NumberFormat.currency(symbol: 'PHP ');
+
+    if (_selectedTab == 0) {
+      // SALES PDF
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          build: (pw.Context context) {
+            return [
+              pw.Header(level: 0, child: pw.Text('Sales Report ($_dateRange)')),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                headers: ['Date/Time', 'TXN ID', 'Cashier', 'Products', 'Total'],
+                data: sales.map((s) {
+                  final time = DateFormat('MMM d, yyyy HH:mm').format(DateTime.parse(s.timestamp));
+                  final productList = s.items.map((i) => '${i.quantity}x ${i.productName}').join(', ');
+                  return [time, s.id.substring(0, 8).toUpperCase(), s.cashierName, productList, fmt.format(s.finalTotal)];
+                }).toList(),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF1A1F36)),
+                rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(1.2),
+                  1: const pw.FlexColumnWidth(1.2),
+                  2: const pw.FlexColumnWidth(1.5),
+                  3: const pw.FlexColumnWidth(3.0), 
+                  4: const pw.FlexColumnWidth(1.0),
+                }
+              ),
+            ];
+          },
+        ),
+      );
+    } else {
+      // INVENTORY PDF
+      pdf.addPage(
+        pw.MultiPage(
+          // 1. FORCE LANDSCAPE
+          pageFormat: PdfPageFormat.a4.landscape, 
+          // 2. REDUCE PAGE MARGINS
+          margin: const pw.EdgeInsets.all(20), 
+          build: (pw.Context context) {
+            return [
+              pw.Header(level: 0, child: pw.Text('Complete Inventory Status')),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                headers: ['Barcode', 'Item Name', 'Category', 'Price', 'Stock', 'Reorder', 'Status', 'Expiration'],
+                data: products.map((p) {
+                  final exp = p.expirationDate != null ? DateFormat('MMM d, yyyy').format(DateTime.parse(p.expirationDate!)) : 'N/A';
+                  return [p.barcode.isEmpty ? 'N/A' : p.barcode, p.name, p.category, fmt.format(p.price), p.stock.toString(), p.reorderLevel.toString(), p.status, exp];
+                }).toList(),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 9),
+                headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF1A1F36)),
+                rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
+                
+                // 3. DROP FONT SIZE
+                cellStyle: const pw.TextStyle(fontSize: 8), 
+                
+                // 4. REDUCE CELL PADDING (Removes dead space between words)
+                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6), 
+                
+                // 5. TIGHTEN COLUMN RATIOS
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(0.2), // Barcode
+                  1: const pw.FlexColumnWidth(0.2), // Name
+                  2: const pw.FlexColumnWidth(0.2), // Category
+                  3: const pw.FlexColumnWidth(0.2), // Price
+                  4: const pw.FlexColumnWidth(0.2), // Stock
+                  5: const pw.FlexColumnWidth(0.2), // Reorder
+                  6: const pw.FlexColumnWidth(0.2), // Status
+                  7: const pw.FlexColumnWidth(0.2), // Expiration
+                },
+                cellAlignments: {
+                  3: pw.Alignment.center, 
+                  4: pw.Alignment.center,      
+                  5: pw.Alignment.center,      
+                  6: pw.Alignment.center,      
+                }
+              ),
+            ];
+          },
+        ),
+      );
+    }
+
+    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save(), name: 'Report_${_selectedTab == 0 ? "Sales" : "Inventory"}.pdf');
   }
 
   @override
@@ -231,289 +277,993 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final provider = context.watch<AppProvider>();
     final allSales = provider.getSales();
     final allProducts = provider.getProducts();
-
+    
     final filteredSales = _getFilteredSales(allSales);
-    final reportData = _generateReportData(filteredSales, allProducts);
-    final fmt = NumberFormat.currency(symbol: '\₱');
 
-    double totalRevenue = 0.0;
-    int totalItemsSold = 0;
-    for (var s in filteredSales) {
-      totalRevenue += s.finalTotal;
-      for (var i in s.items) {
-        totalItemsSold += i.quantity;
-      }
-    }
-    int totalTransactions = filteredSales.length;
-    double avgOrderValue = totalTransactions > 0 ? totalRevenue / totalTransactions : 0.0;
-
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header & Controls
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F7FC),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // --- HEADER & EXPORT BUTTONS ---
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Row 1: Title and Actions
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.analytics_outlined, color: Colors.blue[700], size: 28),
+                          const SizedBox(width: 8),
+                          const Text('Reports & Analytics', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFF1A1F36))),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text('Export and analyze store data', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+                    ],
+                  ),
                   Row(
                     children: [
-                      Icon(Icons.bar_chart, color: Colors.blue[700], size: 28),
-                      const SizedBox(width: 8),
-                      const Text('System Reports', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-                      const Spacer(),
-                      
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[300]!),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _timeFilter,
-                            icon: const Icon(Icons.calendar_today, size: 16),
-                            items: _timeFilters.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-                            onChanged: (v) => setState(() => _timeFilter = v!),
-                          ),
-                        ),
+                      OutlinedButton.icon(
+                        onPressed: () => _exportToPDF(filteredSales, allProducts),
+                        icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                        label: const Text('PDF', style: TextStyle(color: Colors.black87)),
                       ),
                       const SizedBox(width: 12),
-ElevatedButton.icon(
-                        icon: const Icon(Icons.download),
-                        label: const Text('Export to Excel'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
-                        onPressed: () async {
-                          // 1. Ask the user for the Timeframe using a dialog
-                          final String? selectedTimeframe = await showDialog<String>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Select Export Timeframe'),
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  ListTile(
-                                    leading: const Icon(Icons.today, color: Colors.blue),
-                                    title: const Text('Today'),
-                                    onTap: () => Navigator.pop(ctx, 'Today'),
-                                  ),
-                                  ListTile(
-                                    leading: const Icon(Icons.date_range, color: Colors.orange),
-                                    title: const Text('7 Days'),
-                                    onTap: () => Navigator.pop(ctx, '7 Days'),
-                                  ),
-                                  ListTile(
-                                    leading: const Icon(Icons.calendar_month, color: Colors.purple),
-                                    title: const Text('30 Days'),
-                                    onTap: () => Navigator.pop(ctx, '30 Days'),
-                                  ),
-                                  ListTile(
-                                    leading: const Icon(Icons.all_inclusive, color: Colors.green),
-                                    title: const Text('All Time'),
-                                    onTap: () => Navigator.pop(ctx, 'All Time'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-
-                          // If they clicked outside the dialog to cancel, stop here
-                          if (selectedTimeframe == null) return;
-
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Generating $selectedTimeframe Report...')),
-                          );
-
-                          // 2. Pass the selected timeframe into your new Excel Service
-                          final provider = context.read<AppProvider>();
-                          final error = await ExcelService.exportMasterReport(
-                            provider.getSales(), 
-                            provider.getProducts(), 
-                            selectedTimeframe
-                          );
-
-                          if (!context.mounted) return;
-                          
-                          if (error == null) {
-                            // --- NEW: Log the successful export to the SQLite Audit Log ---
-                            await provider.logExportReport(selectedTimeframe);
-
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Report Saved Successfully!'), backgroundColor: Colors.green),
-                            );
-                          } else if (error != 'Cancelled by user') {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(error), backgroundColor: Colors.red),
-                            );
-                          }
-                        },
-                      )
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  // Row 2: Statistics Cards 
-                  Row(
-                    children: [
-                      Expanded(
-                        child: StatCard(
-                          title: 'Total Revenue',
-                          value: fmt.format(totalRevenue),
-                          icon: Icons.attach_money,
-                          color: Colors.green,
-                          background_icon_color: const Color.fromARGB(255, 145, 255, 149),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: StatCard(
-                          title: 'Transactions',
-                          value: '$totalTransactions',
-                          icon: Icons.receipt_long,
-                          color: Colors.blue,
-                          background_icon_color: const Color.fromARGB(255, 166, 227, 255),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: StatCard(
-                          title: 'Items Sold',
-                          value: '$totalItemsSold',
-                          icon: Icons.inventory_2_outlined,
-                          color: Colors.orange,
-                          background_icon_color: const Color.fromARGB(255, 255, 211, 146),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: StatCard(
-                          title: 'Avg Order Value',
-                          value: fmt.format(avgOrderValue),
-                          icon: Icons.analytics_outlined,
-                          color: Colors.purple,
-                          background_icon_color: const Color.fromARGB(255, 230, 180, 255),
-                        ),
+                      OutlinedButton.icon(
+                        onPressed: _exportToExcel,
+                        icon: const Icon(Icons.table_chart, color: Colors.green),
+                        label: const Text('Excel', style: TextStyle(color: Colors.black87)),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  // Row 3: Chart View Selection Chips
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: _reportTypes.map((type) {
-                        final isSelected = _reportType == type;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: ChoiceChip(
-                            label: Text(type),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              if (selected) setState(() => _reportType = type);
-                            },
-                            selectedColor: Colors.blue[100],
-                            labelStyle: TextStyle(
-                              color: isSelected ? Colors.blue[900] : Colors.grey[700],
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
+                  )
                 ],
               ),
-            ),
-          ),
-          
-          const SizedBox(height: 16),
+              const SizedBox(height: 24),
 
-          // --- The Data Presentation Area ---
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Visual Chart Area (Left Side)
-                Expanded(
-                  flex: 3,
-                  child: Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text('$_reportType Chart', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 20),
-                          Expanded(child: _buildChart(reportData)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                
-                // Raw Data Table Area (Right Side)
-                Expanded(
-                  flex: 2,
-                  child: Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text('Raw Data', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          const Divider(),
-                          Expanded(
-                            child: reportData.isEmpty
-                              ? Center(child: Text('No data.', style: TextStyle(color: Colors.grey[400])))
-                              : SingleChildScrollView(
-                                  child: SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: DataTable(
-                                      headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
-                                      dataRowMinHeight: 35,
-                                      dataRowMaxHeight: 35,
-                                      columnSpacing: 20,
-                                      columns: reportData.first.keys.map((key) => DataColumn(
-                                            label: Text(key, style: const TextStyle(fontWeight: FontWeight.bold))
-                                          )).toList(),
-                                      rows: reportData.map((row) {
-                                        return DataRow(
-                                          cells: row.entries.map((entry) {
-                                            final val = entry.key == 'Revenue' 
-                                                ? fmt.format(entry.value) 
-                                                : entry.value.toString();
-                                            return DataCell(
-                                              SizedBox(
-                                                width: 100, 
-                                                child: Text(val, overflow: TextOverflow.ellipsis)
-                                              )
-                                            );
-                                          }).toList(),
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ),
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              // --- TAB SELECTORS ---
+              Row(
+                children: [
+                  _buildTabCard(0, 'Sales', 'Revenue, top items, payment breakdown', Icons.trending_up),
+                  const SizedBox(width: 16),
+                  _buildTabCard(1, 'Inventory', 'Stock levels, value by category', Icons.inventory_2_outlined),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // --- CONTENT RENDERER ---
+              _selectedTab == 0 
+                  ? _buildSalesView(filteredSales) 
+                  : _buildInventoryView(allProducts, filteredSales), // <--- Passed filteredSales here!
+            ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // --- TAB UI COMPONENT ---
+  Widget _buildTabCard(int index, String title, String subtitle, IconData icon) {
+    final isSelected = _selectedTab == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _selectedTab = index),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.blue[50] : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: isSelected ? Colors.blue[300]! : Colors.grey[200]!, width: isSelected ? 1.5 : 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: isSelected ? Colors.blue[700] : Colors.grey[600]),
+              const SizedBox(height: 12),
+              Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isSelected ? Colors.blue[900] : Colors.black87)),
+              const SizedBox(height: 4),
+              Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+// ==========================================
+  // SALES VIEW (SUPERCHARGED)
+  // ==========================================
+  Widget _buildSalesView(List<Sale> sales) {
+    final fmt = NumberFormat.currency(symbol: '₱');
+    
+    // --- ADVANCED METRICS ---
+    final totalRevenue = sales.fold(0.0, (sum, s) => sum + s.finalTotal);
+    
+    // 1. Discount Leakage
+    final totalDiscounts = sales.fold(0.0, (sum, s) => sum + s.discount);
+    
+    // 2. True Profit (Assuming 70% COGS for this simulation, replace with exact batch cost later)
+    final totalCOGS = sales.fold(0.0, (sum, s) => sum + (s.finalTotal * 0.70)); 
+    final trueProfit = totalRevenue - totalCOGS;
+
+    // Target Calculation
+    int days = 7;
+    if (_dateRange == 'Today') days = 1;
+    if (_dateRange == 'Last 30 Days') days = 30;
+    final targetGoal = _dailyRevenueTarget * days;
+    final targetHit = totalRevenue >= targetGoal;
+    final progress = (totalRevenue / targetGoal).clamp(0.0, 1.0);
+    final remaining = targetGoal - totalRevenue;
+
+    // Payment Mix Calculation
+    final paymentMix = <String, double>{};
+    for (var s in sales) {
+      paymentMix[s.paymentMethod] = (paymentMix[s.paymentMethod] ?? 0) + s.finalTotal;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Date Filters
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: ['Today', 'Last 7 Days', 'Last 30 Days', 'Year to Date'].map((range) {
+              final isSelected = _dateRange == range;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: ChoiceChip(
+                  label: Text(range, style: TextStyle(color: isSelected ? Colors.white : Colors.grey[800])),
+                  selected: isSelected,
+                  selectedColor: Colors.blue[600],
+                  backgroundColor: Colors.white,
+                  onSelected: (_) => setState(() => _dateRange = range),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // --- ENHANCED KPIs ---
+        Row(
+          children: [
+            _buildKPI('Total Revenue', fmt.format(totalRevenue), Colors.green),
+            const SizedBox(width: 16),
+            _buildKPI('True Profit (Net)', fmt.format(trueProfit), Colors.purple),
+            const SizedBox(width: 16),
+            _buildKPI('Discount Leakage', '-${fmt.format(totalDiscounts)}', Colors.red),
+            const SizedBox(width: 16),
+            _buildKPI('Target Status', targetHit ? 'Goal Hit! 🎉' : 'Behind Pace', targetHit ? Colors.green : Colors.orange),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // --- ROW 1: REVENUE TREND & CASHIER LEADERBOARD ---
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 5,
+              child: Container(
+                height: 350,
+                padding: const EdgeInsets.all(20),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Revenue Over Time', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 20),
+                    Expanded(child: _buildSalesLineChart(sales)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              flex: 3,
+              child: Container(
+                height: 350,
+                padding: const EdgeInsets.all(20),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.emoji_events, color: Colors.amber),
+                        SizedBox(width: 8),
+                        Text('Cashier Leaderboard', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(child: _buildCashierLeaderboard(sales)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // --- ROW 2: PEAK HOURS & PAYMENT MIX ---
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 5,
+              child: Container(
+                height: 320,
+                padding: const EdgeInsets.all(20),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Peak Hours Traffic', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Transactions by hour of day', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    const SizedBox(height: 24),
+                    Expanded(child: _buildPeakHoursChart(sales)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              flex: 3,
+              child: Container(
+                height: 320,
+                padding: const EdgeInsets.all(20),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Payment mix', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(_dateRange, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    const SizedBox(height: 24),
+                    Expanded(child: _buildPaymentMixChart(paymentMix)),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Total received', style: TextStyle(color: Colors.grey[600])),
+                        Text(fmt.format(totalRevenue), style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // --- ROW 3: SALES GOAL ---
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: _cardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Sales Goal Progress', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(_dateRange, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  SizedBox(
+                    height: 100, width: 100,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        CircularProgressIndicator(value: progress, strokeWidth: 10, backgroundColor: Colors.grey[100], color: Colors.blue[600]),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('${(progress * 100).toStringAsFixed(0)}%', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                            Text('of goal', style: TextStyle(color: Colors.grey[500], fontSize: 10)),
+                          ],
+                        )
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 32),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('ACHIEVED', style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text(fmt.format(totalRevenue), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('TARGET', style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text(fmt.format(targetGoal), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.grey)),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('REMAINING', style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text(remaining > 0 ? fmt.format(remaining) : '₱0.00', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: remaining > 0 ? Colors.orange[700] : Colors.green)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================
+  // INVENTORY VIEW (SUPERCHARGED)
+  // ==========================================
+  Widget _buildInventoryView(List<Product> products, List<Sale> sales) {
+    final fmt = NumberFormat.currency(symbol: '₱');
+    
+    // --- ADVANCED METRICS ---
+    final totalValue = products.fold(0.0, (sum, p) => sum + (p.price * p.stock));
+    
+    // 1. Spoilage & Shrinkage (Value of Expired Goods)
+    final expiredProducts = products.where((p) => p.status == 'Expired').toList();
+    final spoilageValue = expiredProducts.fold(0.0, (sum, p) => sum + (p.price * p.stock));
+
+    // 2. Dead Stock Radar (Items with 0 sales in the selected date range)
+    final soldProductNames = sales.expand((s) => s.items.map((i) => i.productName)).toSet();
+    final deadStock = products.where((p) => p.stock > 0 && !soldProductNames.contains(p.name)).toList();
+    deadStock.sort((a, b) => (b.price * b.stock).compareTo(a.price * a.stock)); // Sort by most expensive dead stock
+
+    // 3. Restock Plan (PO Generator)
+    final lowStock = products.where((p) => p.stock > 0 && p.stock <= p.reorderLevel).toList();
+    final outOfStock = products.where((p) => p.stock == 0).toList();
+    final itemsToOrder = [...outOfStock, ...lowStock];
+    
+    // Calculate estimated cost to restock everything (assuming 60% of retail price as wholesale cost)
+    double totalRestockCost = 0.0;
+    for (var p in itemsToOrder) {
+      int suggestedOrder = (p.reorderLevel * 2) - p.stock;
+      if (suggestedOrder < 20) suggestedOrder = 20; 
+      totalRestockCost += suggestedOrder * (p.price * 0.60);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Date Filters (Applies to Dead Stock radar)
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: ['Last 7 Days', 'Last 30 Days', 'Year to Date'].map((range) {
+              final isSelected = _dateRange == range;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: ChoiceChip(
+                  label: Text(range, style: TextStyle(color: isSelected ? Colors.white : Colors.grey[800])),
+                  selected: isSelected,
+                  selectedColor: Colors.blue[600],
+                  backgroundColor: Colors.white,
+                  onSelected: (_) => setState(() => _dateRange = range),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // --- ENHANCED KPIs ---
+        Row(
+          children: [
+            _buildKPI('Total Stock Value', fmt.format(totalValue), Colors.green),
+            const SizedBox(width: 16),
+            _buildKPI('Spoilage Loss (Expired)', fmt.format(spoilageValue), Colors.red),
+            const SizedBox(width: 16),
+            _buildKPI('Dead Stock Items', '${deadStock.length} items', Colors.purple),
+            const SizedBox(width: 16),
+            _buildKPI('Est. Restock Cost', fmt.format(totalRestockCost), Colors.orange),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // --- ROW 1: DISTRIBUTION & CATEGORIES ---
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 4,
+              child: Container(
+                height: 350,
+                padding: const EdgeInsets.all(20),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Stock Status Distribution', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 24),
+                    Expanded(child: _buildDetailedInventoryPieChart(products)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              flex: 5,
+              child: Container(
+                height: 350,
+                padding: const EdgeInsets.all(20),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Value Locked by Category', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 24),
+                    Expanded(child: _buildDetailedCategoryBarChart(products)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // --- ROW 2: DEAD STOCK RADAR & PO GENERATOR ---
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Dead Stock Radar
+            Expanded(
+              flex: 1,
+              child: Container(
+                height: 350,
+                padding: const EdgeInsets.all(20),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.radar, color: Colors.purple[600]),
+                        const SizedBox(width: 8),
+                        const Text('Dead Stock Radar', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    Text('0 sales in $_dateRange', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    const SizedBox(height: 16),
+                    Expanded(child: _buildDeadStockRadar(deadStock)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 24),
+
+            // Automated PO Generator
+            Expanded(
+              flex: 1,
+              child: Container(
+                height: 350,
+                padding: const EdgeInsets.all(20),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.request_quote, color: Colors.orange[700]),
+                            const SizedBox(width: 8),
+                            const Text('Restock Plan (PO)', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        TextButton.icon(
+                          // --- CHANGED THIS LINE ---
+                          onPressed: () => _exportPOToPDF(itemsToOrder), 
+                          icon: const Icon(Icons.send, size: 16),
+                          label: const Text('Export PO'),
+                        )
+                      ],
+                    ),
+                    Text('${itemsToOrder.length} items require reordering', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    const SizedBox(height: 16),
+                    Expanded(child: _buildRestockPlan(itemsToOrder)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        )
+      ],
+    );
+  }
+
+  // --- UI HELPERS & CHARTS ---
+
+  BoxDecoration _cardDecoration() => BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey[200]!));
+
+  Widget _buildKPI(String title, String value, MaterialColor color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: _cardDecoration(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(color: Colors.grey[500], fontSize: 13, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color[700])),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSalesLineChart(List<Sale> sales) {
+    if (sales.isEmpty) return const Center(child: Text('No data for selected range.'));
+    
+    // Group sales by day
+    final grouped = <int, double>{};
+    for (var s in sales) {
+      final day = DateTime.parse(s.timestamp).day;
+      grouped[day] = (grouped[day] ?? 0) + s.finalTotal;
+    }
+    
+    final sortedKeys = grouped.keys.toList()..sort();
+    List<FlSpot> spots = sortedKeys.map((day) => FlSpot(day.toDouble(), grouped[day]!)).toList();
+
+    return LineChart(
+      LineChartData(
+        gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 5000),
+        titlesData: const FlTitlesData(topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false))),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(spots: spots, isCurved: true, color: Colors.blue[600], barWidth: 3, belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.1))),
         ],
       ),
     );
   }
+
+  Widget _buildInventoryPieChart(List<Product> products) {
+    if (products.isEmpty) return const SizedBox();
+    final outOfStock = products.where((p) => p.stock == 0).length;
+    final lowStock = products.where((p) => p.stock > 0 && p.stock <= p.reorderLevel).length;
+    final normal = products.length - outOfStock - lowStock;
+
+    return PieChart(
+      PieChartData(
+        sectionsSpace: 2, centerSpaceRadius: 40,
+        sections: [
+          PieChartSectionData(color: Colors.green, value: normal.toDouble(), title: 'Normal', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white)),
+          PieChartSectionData(color: Colors.orange, value: lowStock.toDouble(), title: 'Low', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white)),
+          PieChartSectionData(color: Colors.red, value: outOfStock.toDouble(), title: 'Out', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white)),
+        ]
+      )
+    );
+  }
+
+  Widget _buildCategoryBarChart(List<Product> products) {
+    if (products.isEmpty) return const SizedBox();
+    
+    final catValue = <String, double>{};
+    for (var p in products) {
+      catValue[p.category] = (catValue[p.category] ?? 0) + (p.stock * p.price);
+    }
+    
+    final sortedCats = catValue.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final topCats = sortedCats.take(5).toList();
+
+    return BarChart(
+      BarChartData(
+        gridData: const FlGridData(show: false),
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                if (value.toInt() >= 0 && value.toInt() < topCats.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(topCats[value.toInt()].key, style: const TextStyle(fontSize: 10), overflow: TextOverflow.ellipsis),
+                  );
+                }
+                return const Text('');
+              }
+            )
+          )
+        ),
+        borderData: FlBorderData(show: false),
+        barGroups: topCats.asMap().entries.map((e) {
+          return BarChartGroupData(
+            x: e.key,
+            barRods: [BarChartRodData(toY: e.value.value, color: Colors.blue[600], width: 24, borderRadius: const BorderRadius.vertical(top: Radius.circular(4)))],
+          );
+        }).toList(),
+      )
+    );
+  }
 }
+
+// --- ADD THIS HELPER ---
+  Widget _buildPaymentMixChart(Map<String, double> paymentMix) {
+    if (paymentMix.isEmpty) return const Center(child: Text('No payments recorded.'));
+    
+    final colors = [Colors.green, Colors.orange, Colors.blue, Colors.purple];
+    final sections = paymentMix.entries.toList();
+
+    return Row(
+      children: [
+        Expanded(
+          child: PieChart(
+            PieChartData(
+              sectionsSpace: 2, centerSpaceRadius: 35,
+              sections: sections.asMap().entries.map((e) {
+                return PieChartSectionData(
+                  color: colors[e.key % colors.length],
+                  value: e.value.value,
+                  title: '', // Keep donut clean
+                  radius: 20,
+                );
+              }).toList()
+            )
+          )
+        ),
+        const SizedBox(width: 16),
+        Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: sections.asMap().entries.map((e) {
+            return Row(
+              children: [
+                Icon(Icons.circle, size: 10, color: colors[e.key % colors.length]),
+                const SizedBox(width: 8),
+                Text(e.value.key, style: TextStyle(color: Colors.grey[700], fontSize: 12)),
+              ],
+            );
+          }).toList(),
+        )
+      ],
+    );
+  }
+
+  // --- REPLACE THIS HELPER ---
+  Widget _buildDetailedInventoryPieChart(List<Product> products) {
+    if (products.isEmpty) return const SizedBox();
+    final outOfStock = products.where((p) => p.stock == 0).length;
+    final lowStock = products.where((p) => p.stock > 0 && p.stock <= p.reorderLevel).length;
+    final normal = products.length - outOfStock - lowStock;
+    final total = products.length;
+
+    return Row(
+      children: [
+        Expanded(
+          child: PieChart(
+            PieChartData(
+              sectionsSpace: 2, centerSpaceRadius: 50,
+              sections: [
+                PieChartSectionData(color: Colors.green[400], value: normal.toDouble(), title: '${((normal/total)*100).toStringAsFixed(0)}%', radius: 30, titleStyle: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+                PieChartSectionData(color: Colors.orange[400], value: lowStock.toDouble(), title: '${((lowStock/total)*100).toStringAsFixed(0)}%', radius: 30, titleStyle: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+                if (outOfStock > 0)
+                  PieChartSectionData(color: Colors.red[400], value: outOfStock.toDouble(), title: '${((outOfStock/total)*100).toStringAsFixed(0)}%', radius: 30, titleStyle: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+              ]
+            )
+          )
+        ),
+        const SizedBox(width: 16),
+        Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [Icon(Icons.circle, size: 10, color: Colors.green[400]), const SizedBox(width: 8), Text('Normal ($normal)', style: const TextStyle(fontSize: 12))]),
+            const SizedBox(height: 8),
+            Row(children: [Icon(Icons.circle, size: 10, color: Colors.orange[400]), const SizedBox(width: 8), Text('Low Stock ($lowStock)', style: const TextStyle(fontSize: 12))]),
+            const SizedBox(height: 8),
+            Row(children: [Icon(Icons.circle, size: 10, color: Colors.red[400]), const SizedBox(width: 8), Text('Critical ($outOfStock)', style: const TextStyle(fontSize: 12))]),
+          ],
+        )
+      ],
+    );
+  }
+
+  // --- REPLACE THIS HELPER ---
+  Widget _buildDetailedCategoryBarChart(List<Product> products) {
+    if (products.isEmpty) return const SizedBox();
+    
+    final catValue = <String, double>{};
+    for (var p in products) {
+      catValue[p.category] = (catValue[p.category] ?? 0) + (p.stock * p.price);
+    }
+    
+    final sortedCats = catValue.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final topCats = sortedCats.take(6).toList(); 
+    
+    // FIX 1: Increased from 1.2 to 1.3 (30% headroom) so the tooltips never hit the ceiling
+    final maxY = topCats.isEmpty ? 100.0 : topCats.first.value * 1.3; 
+
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: maxY,
+        gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: (maxY / 4).ceilToDouble()),
+        
+        // FIX 2: Stylized the Tooltip to be cleaner
+        barTouchData: BarTouchData(
+          enabled: false, // False because we force them to always show via showingTooltipIndicators
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (group) => Colors.blueGrey[700]!, // Background color of the tooltip
+            tooltipMargin: 8,
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              return BarTooltipItem(
+                rod.toY.toStringAsFixed(0), // Clean whole numbers
+                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+              );
+            },
+          ),
+        ),
+        
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          
+          // FIX 3: Explicitly sizing and formatting the Left Y-Axis
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 50, // Added much more breathing room so text doesn't overlap
+              getTitlesWidget: (value, meta) {
+                if (value == 0) return const SizedBox.shrink();
+                
+                // Formats numbers cleanly (e.g., 12500 -> "12.5k")
+                String text = value >= 1000 
+                    ? '${(value / 1000).toStringAsFixed(1)}k' 
+                    : value.toStringAsFixed(0);
+                    
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Text(text, style: TextStyle(color: Colors.grey[600], fontSize: 11), textAlign: TextAlign.right),
+                );
+              }
+            )
+          ),
+          
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 32,
+              getTitlesWidget: (value, meta) {
+                if (value.toInt() >= 0 && value.toInt() < topCats.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(topCats[value.toInt()].key, style: TextStyle(fontSize: 11, color: Colors.grey[700]), overflow: TextOverflow.ellipsis),
+                  );
+                }
+                return const SizedBox.shrink();
+              }
+            )
+          )
+        ),
+        borderData: FlBorderData(show: false),
+        barGroups: topCats.asMap().entries.map((e) {
+          return BarChartGroupData(
+            x: e.key,
+            barRods: [
+              BarChartRodData(
+                toY: e.value.value, 
+                color: Colors.blue[500], 
+                width: 32, 
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(6))
+              )
+            ],
+            showingTooltipIndicators: [0], // Forces value label to always show on top
+          );
+        }).toList(),
+      )
+    );
+  }
+
+  // --- NEW: Cashier Leaderboard ---
+  Widget _buildCashierLeaderboard(List<Sale> sales) {
+    if (sales.isEmpty) return const Center(child: Text('No sales data.'));
+    final fmt = NumberFormat.currency(symbol: '₱');
+    
+    // Aggregate sales by cashier
+    final cashierStats = <String, Map<String, dynamic>>{};
+    for (var s in sales) {
+      if (!cashierStats.containsKey(s.cashierName)) {
+        cashierStats[s.cashierName] = {'revenue': 0.0, 'txns': 0};
+      }
+      cashierStats[s.cashierName]!['revenue'] += s.finalTotal;
+      cashierStats[s.cashierName]!['txns'] += 1;
+    }
+
+    final sortedCashiers = cashierStats.entries.toList()..sort((a, b) => b.value['revenue'].compareTo(a.value['revenue']));
+
+    return ListView.separated(
+      itemCount: sortedCashiers.length,
+      separatorBuilder: (_, __) => const Divider(),
+      itemBuilder: (context, index) {
+        final entry = sortedCashiers[index];
+        final isTop = index == 0;
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: CircleAvatar(
+            backgroundColor: isTop ? Colors.amber[100] : Colors.blue[50],
+            child: Text('${index + 1}', style: TextStyle(color: isTop ? Colors.amber[900] : Colors.blue[900], fontWeight: FontWeight.bold)),
+          ),
+          title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: Text('${entry.value['txns']} transactions', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+          trailing: Text(fmt.format(entry.value['revenue']), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+        );
+      },
+    );
+  }
+
+  // --- NEW: Peak Hours Heatmap / Bar Chart ---
+  Widget _buildPeakHoursChart(List<Sale> sales) {
+    if (sales.isEmpty) return const Center(child: Text('No sales data.'));
+
+    // Count transactions per hour (0 to 23)
+    final hourlyCounts = List.filled(24, 0);
+    for (var s in sales) {
+      final hour = DateTime.parse(s.timestamp).hour;
+      hourlyCounts[hour] += 1;
+    }
+
+    final maxCount = hourlyCounts.reduce((curr, next) => curr > next ? curr : next).toDouble();
+
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: maxCount == 0 ? 10 : maxCount + 2,
+        gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: (maxCount / 4) == 0 ? 1 : maxCount / 4),
+        borderData: FlBorderData(show: false),
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final hour = value.toInt();
+                // Only show labels every 3 hours to avoid crowding
+                if (hour % 3 == 0) {
+                  final ampm = hour >= 12 ? 'PM' : 'AM';
+                  final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text('$displayHour$ampm', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                  );
+                }
+                return const Text('');
+              }
+            )
+          )
+        ),
+        barGroups: List.generate(24, (index) {
+          final count = hourlyCounts[index];
+          // Color changes based on volume (heatmap logic)
+          Color barColor = Colors.blue[100]!;
+          if (count > maxCount * 0.75) barColor = Colors.red[400]!; // Very Busy
+          else if (count > maxCount * 0.4) barColor = Colors.orange[400]!; // Busy
+          else if (count > 0) barColor = Colors.blue[400]!; // Normal
+
+          return BarChartGroupData(
+            x: index,
+            barRods: [
+              BarChartRodData(
+                toY: count.toDouble(),
+                color: barColor,
+                width: 14,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(4))
+              )
+            ],
+          );
+        }),
+      )
+    );
+  }
+
+  // --- NEW: Dead Stock Radar ---
+  Widget _buildDeadStockRadar(List<Product> deadStock) {
+    if (deadStock.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_outline, color: Colors.green[300], size: 48),
+            const SizedBox(height: 12),
+            Text('No Dead Stock!', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+            Text('All inventory is moving perfectly.', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+          ],
+        ),
+      );
+    }
+
+    final fmt = NumberFormat.currency(symbol: '₱');
+    
+    return ListView.separated(
+      itemCount: deadStock.length,
+      separatorBuilder: (_, __) => const Divider(),
+      itemBuilder: (context, index) {
+        final p = deadStock[index];
+        final lockedValue = p.stock * p.price;
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14), overflow: TextOverflow.ellipsis),
+          subtitle: Text('In Stock: ${p.stock}  •  Category: ${p.category}', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+          trailing: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text('Value Locked', style: TextStyle(fontSize: 10, color: Colors.red)),
+              Text(fmt.format(lockedValue), style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red[700])),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // --- NEW: Restock Plan (PO Generator) ---
+  Widget _buildRestockPlan(List<Product> itemsToOrder) {
+    if (itemsToOrder.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inventory, color: Colors.green[300], size: 48),
+            const SizedBox(height: 12),
+            Text('Inventory is Healthy', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+            Text('No items need to be ordered.', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+          ],
+        ),
+      );
+    }
+
+    final fmt = NumberFormat.currency(symbol: '₱');
+    
+    return ListView.separated(
+      itemCount: itemsToOrder.length,
+      separatorBuilder: (_, __) => const Divider(),
+      itemBuilder: (context, index) {
+        final p = itemsToOrder[index];
+        int suggestedOrder = (p.reorderLevel * 2) - p.stock;
+        if (suggestedOrder < 20) suggestedOrder = 20; 
+        final estCost = suggestedOrder * (p.price * 0.60); // 60% wholesale est
+
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14), overflow: TextOverflow.ellipsis),
+          subtitle: Row(
+            children: [
+              Text('Have: ${p.stock}', style: TextStyle(color: p.stock == 0 ? Colors.red : Colors.orange, fontWeight: FontWeight.bold, fontSize: 11)),
+              Text('  •  Need: $suggestedOrder', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+            ],
+          ),
+          trailing: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text('Est. Cost', style: TextStyle(fontSize: 10, color: Colors.grey)),
+              Text(fmt.format(estCost), style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange[800])),
+            ],
+          ),
+        );
+      },
+    );
+  }
