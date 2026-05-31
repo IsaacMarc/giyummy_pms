@@ -211,11 +211,7 @@ class ExcelService {
 
     int trendEnd = drawTable('Date', 'Revenue', 1, sortedDates, true, false); 
     int catEnd = drawTable('Category', 'Qty Sold', 4, categorySales.entries.toList(), false, true); 
-    int topEnd = drawTable('Top Product', 'Qty Sold', 7, top5, false, true); 
-    int botEnd = drawTable('Low Product', 'Qty Sold', 10, bottom5, false, true); 
     int payEnd = drawTable('Payment Method', 'Count', 13, paymentMethods.entries.toList(), false, true); 
-    int cashEnd = drawTable('Cashier', 'Revenue', 16, sortedCashiers, true, false);
-
 
     // -------------------------------------------------------------
     // VISUAL CHARTS (Using Auto-Naming Data Ranges to prevent crashes)

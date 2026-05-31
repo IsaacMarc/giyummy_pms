@@ -335,10 +335,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ),
               const SizedBox(height: 24),
 
-              // --- CONTENT RENDERER ---
+ // --- CONTENT RENDERER ---
               _selectedTab == 0 
                   ? _buildSalesView(filteredSales) 
-                  : _buildInventoryView(allProducts, filteredSales), // <--- Passed filteredSales here!
+                  // --- NEW: Passing allSales here for accurate Dead Stock calculation ---
+                  : _buildInventoryView(allProducts, filteredSales, allSales),
             ],
           ),
         ),
@@ -610,22 +611,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+ // ==========================================
+  // INVENTORY VIEW (SUPERCHARGED & FIXED)
   // ==========================================
-  // INVENTORY VIEW (SUPERCHARGED)
-  // ==========================================
-  Widget _buildInventoryView(List<Product> products, List<Sale> sales) {
+  Widget _buildInventoryView(List<Product> products, List<Sale> filteredSales, List<Sale> allSales) {
     final fmt = NumberFormat.currency(symbol: '₱');
     
     // --- ADVANCED METRICS ---
     final totalValue = products.fold(0.0, (sum, p) => sum + (p.price * p.stock));
     
-    // 1. Spoilage & Shrinkage (Value of Expired Goods)
+    // 1. Spoilage Loss
     final expiredProducts = products.where((p) => p.status == 'Expired').toList();
     final spoilageValue = expiredProducts.fold(0.0, (sum, p) => sum + (p.price * p.stock));
 
-    // 2. Dead Stock Radar (Items with 0 sales in the selected date range)
-    final soldProductNames = sales.expand((s) => s.items.map((i) => i.productName)).toSet();
-    final deadStock = products.where((p) => p.stock > 0 && !soldProductNames.contains(p.name)).toList();
+    // 2. FIXED Dead Stock Radar (Strictly checks for 0 sales in the last 30 days)
+    final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+    final last30DaysSales = allSales.where((s) => DateTime.parse(s.timestamp).isAfter(thirtyDaysAgo)).toList();
+    // Using productId instead of name for perfect accuracy
+    final soldProductIds = last30DaysSales.expand((s) => s.items.map((i) => i.productId)).toSet();
+    
+    final deadStock = products.where((p) => p.stock > 0 && !soldProductIds.contains(p.id)).toList();
     deadStock.sort((a, b) => (b.price * b.stock).compareTo(a.price * a.stock)); // Sort by most expensive dead stock
 
     // 3. Restock Plan (PO Generator)
@@ -633,7 +638,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final outOfStock = products.where((p) => p.stock == 0).toList();
     final itemsToOrder = [...outOfStock, ...lowStock];
     
-    // Calculate estimated cost to restock everything (assuming 60% of retail price as wholesale cost)
     double totalRestockCost = 0.0;
     for (var p in itemsToOrder) {
       int suggestedOrder = (p.reorderLevel * 2) - p.stock;
@@ -641,14 +645,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
       totalRestockCost += suggestedOrder * (p.price * 0.60);
     }
 
+    // 4. RESTORED Top Items Calculation (Respects the selected Date Range filter)
+    final itemQtys = <String, int>{};
+    final itemRevs = <String, double>{};
+    for (var s in filteredSales) {
+      for (var i in s.items) {
+        itemQtys[i.productName] = (itemQtys[i.productName] ?? 0) + i.quantity;
+        itemRevs[i.productName] = (itemRevs[i.productName] ?? 0) + i.subtotal;
+      }
+    }
+    final sortedItems = itemQtys.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final topItems = sortedItems.take(5).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Date Filters (Applies to Dead Stock radar)
+        // Date Filters
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
-            children: ['Last 7 Days', 'Last 30 Days', 'Year to Date'].map((range) {
+            children: ['Today', 'Last 7 Days', 'Last 30 Days', 'Year to Date'].map((range) {
               final isSelected = _dateRange == range;
               return Padding(
                 padding: const EdgeInsets.only(right: 8.0),
@@ -679,14 +695,79 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
         const SizedBox(height: 24),
 
-        // --- ROW 1: DISTRIBUTION & CATEGORIES ---
+        // --- ROW 1: TOP ITEMS | STOCK PIE | DEAD STOCK ---
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 1. RESTORED Top Items
             Expanded(
               flex: 4,
               child: Container(
-                height: 350,
+                height: 360,
+                padding: const EdgeInsets.all(20),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Top items', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text('By units sold ($_dateRange)', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    if (topItems.isEmpty) const Padding(padding: EdgeInsets.all(16.0), child: Text('No items sold in this range.')),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: topItems.length,
+                        itemBuilder: (ctx, index) {
+                          final name = topItems[index].key;
+                          final qty = topItems[index].value;
+                          final rev = itemRevs[name] ?? 0.0;
+                          final maxQty = topItems.first.value;
+                          final progress = qty / maxQty;
+                          
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6.0),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Text('${index + 1}', style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.bold)),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                                    Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    const SizedBox(width: 20),
+                                    Expanded(
+                                      child: LinearProgressIndicator(
+                                        value: progress, minHeight: 6,
+                                        backgroundColor: Colors.grey[100], color: Colors.blue[600],
+                                        borderRadius: BorderRadius.circular(4),
+                                      )
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(fmt.format(rev), style: TextStyle(color: Colors.grey[500], fontSize: 11)),
+                                  ],
+                                )
+                              ],
+                            ),
+                          );
+                        }
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 24),
+
+            // 2. Stock Distribution
+            Expanded(
+              flex: 4,
+              child: Container(
+                height: 360,
                 padding: const EdgeInsets.all(20),
                 decoration: _cardDecoration(),
                 child: Column(
@@ -700,8 +781,42 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ),
             ),
             const SizedBox(width: 24),
+
+            // 3. Dead Stock Radar
             Expanded(
-              flex: 5,
+              flex: 4,
+              child: Container(
+                height: 360,
+                padding: const EdgeInsets.all(20),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.radar, color: Colors.purple[600]),
+                        const SizedBox(width: 8),
+                        const Text('Dead Stock Radar', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    Text('0 sales in the last 30 days', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    const SizedBox(height: 16),
+                    Expanded(child: _buildDeadStockRadar(deadStock)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // --- ROW 2: CATEGORY BAR & RESTOCK PO ---
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. Value by Category
+            Expanded(
+              flex: 1,
               child: Container(
                 height: 350,
                 padding: const EdgeInsets.all(20),
@@ -716,41 +831,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 ),
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 24),
-
-        // --- ROW 2: DEAD STOCK RADAR & PO GENERATOR ---
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Dead Stock Radar
-            Expanded(
-              flex: 1,
-              child: Container(
-                height: 350,
-                padding: const EdgeInsets.all(20),
-                decoration: _cardDecoration(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.radar, color: Colors.purple[600]),
-                        const SizedBox(width: 8),
-                        const Text('Dead Stock Radar', style: TextStyle(fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    Text('0 sales in $_dateRange', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-                    const SizedBox(height: 16),
-                    Expanded(child: _buildDeadStockRadar(deadStock)),
-                  ],
-                ),
-              ),
-            ),
             const SizedBox(width: 24),
 
-            // Automated PO Generator
+            // 2. Restock Plan
             Expanded(
               flex: 1,
               child: Container(
@@ -771,7 +854,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           ],
                         ),
                         TextButton.icon(
-                          // --- CHANGED THIS LINE ---
                           onPressed: () => _exportPOToPDF(itemsToOrder), 
                           icon: const Icon(Icons.send, size: 16),
                           label: const Text('Export PO'),
@@ -837,67 +919,67 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildInventoryPieChart(List<Product> products) {
-    if (products.isEmpty) return const SizedBox();
-    final outOfStock = products.where((p) => p.stock == 0).length;
-    final lowStock = products.where((p) => p.stock > 0 && p.stock <= p.reorderLevel).length;
-    final normal = products.length - outOfStock - lowStock;
+//   Widget _buildInventoryPieChart(List<Product> products) {
+//     if (products.isEmpty) return const SizedBox();
+//     final outOfStock = products.where((p) => p.stock == 0).length;
+//     final lowStock = products.where((p) => p.stock > 0 && p.stock <= p.reorderLevel).length;
+//     final normal = products.length - outOfStock - lowStock;
 
-    return PieChart(
-      PieChartData(
-        sectionsSpace: 2, centerSpaceRadius: 40,
-        sections: [
-          PieChartSectionData(color: Colors.green, value: normal.toDouble(), title: 'Normal', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white)),
-          PieChartSectionData(color: Colors.orange, value: lowStock.toDouble(), title: 'Low', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white)),
-          PieChartSectionData(color: Colors.red, value: outOfStock.toDouble(), title: 'Out', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white)),
-        ]
-      )
-    );
-  }
+//     return PieChart(
+//       PieChartData(
+//         sectionsSpace: 2, centerSpaceRadius: 40,
+//         sections: [
+//           PieChartSectionData(color: Colors.green, value: normal.toDouble(), title: 'Normal', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white)),
+//           PieChartSectionData(color: Colors.orange, value: lowStock.toDouble(), title: 'Low', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white)),
+//           PieChartSectionData(color: Colors.red, value: outOfStock.toDouble(), title: 'Out', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white)),
+//         ]
+//       )
+//     );
+//   }
 
-  Widget _buildCategoryBarChart(List<Product> products) {
-    if (products.isEmpty) return const SizedBox();
+//   Widget _buildCategoryBarChart(List<Product> products) {
+//     if (products.isEmpty) return const SizedBox();
     
-    final catValue = <String, double>{};
-    for (var p in products) {
-      catValue[p.category] = (catValue[p.category] ?? 0) + (p.stock * p.price);
-    }
+//     final catValue = <String, double>{};
+//     for (var p in products) {
+//       catValue[p.category] = (catValue[p.category] ?? 0) + (p.stock * p.price);
+//     }
     
-    final sortedCats = catValue.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    final topCats = sortedCats.take(5).toList();
+//     final sortedCats = catValue.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+//     final topCats = sortedCats.take(5).toList();
 
-    return BarChart(
-      BarChartData(
-        gridData: const FlGridData(show: false),
-        titlesData: FlTitlesData(
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                if (value.toInt() >= 0 && value.toInt() < topCats.length) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(topCats[value.toInt()].key, style: const TextStyle(fontSize: 10), overflow: TextOverflow.ellipsis),
-                  );
-                }
-                return const Text('');
-              }
-            )
-          )
-        ),
-        borderData: FlBorderData(show: false),
-        barGroups: topCats.asMap().entries.map((e) {
-          return BarChartGroupData(
-            x: e.key,
-            barRods: [BarChartRodData(toY: e.value.value, color: Colors.blue[600], width: 24, borderRadius: const BorderRadius.vertical(top: Radius.circular(4)))],
-          );
-        }).toList(),
-      )
-    );
-  }
-}
+//     return BarChart(
+//       BarChartData(
+//         gridData: const FlGridData(show: false),
+//         titlesData: FlTitlesData(
+//           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+//           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+//           bottomTitles: AxisTitles(
+//             sideTitles: SideTitles(
+//               showTitles: true,
+//               getTitlesWidget: (value, meta) {
+//                 if (value.toInt() >= 0 && value.toInt() < topCats.length) {
+//                   return Padding(
+//                     padding: const EdgeInsets.only(top: 8.0),
+//                     child: Text(topCats[value.toInt()].key, style: const TextStyle(fontSize: 10), overflow: TextOverflow.ellipsis),
+//                   );
+//                 }
+//                 return const Text('');
+//               }
+//             )
+//           )
+//         ),
+//         borderData: FlBorderData(show: false),
+//         barGroups: topCats.asMap().entries.map((e) {
+//           return BarChartGroupData(
+//             x: e.key,
+//             barRods: [BarChartRodData(toY: e.value.value, color: Colors.blue[600], width: 24, borderRadius: const BorderRadius.vertical(top: Radius.circular(4)))],
+//           );
+//         }).toList(),
+//       )
+//     );
+//   }
+// }
 
 // --- ADD THIS HELPER ---
   Widget _buildPaymentMixChart(Map<String, double> paymentMix) {
@@ -1267,3 +1349,4 @@ class _ReportsScreenState extends State<ReportsScreen> {
       },
     );
   }
+}

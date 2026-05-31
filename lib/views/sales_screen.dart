@@ -195,7 +195,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   // --- Receipt Dialog Widget ---
   void _showReceiptDialog(BuildContext context, List<SaleItem> items, double subtotal, double discountAmt, double finalTotal, String paymentMethod, double given, double change) {
-    final fmt = NumberFormat.currency(symbol: '\₱');
+    final fmt = NumberFormat.currency(symbol: '₱');
     final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
 
     showDialog(
