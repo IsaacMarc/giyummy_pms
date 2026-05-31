@@ -14,6 +14,7 @@ import 'package:product_management/views/profile_screen.dart';
 import 'package:product_management/views/user_management_screen.dart';
 import 'package:product_management/views/maintenance_screen.dart';
 import 'package:product_management/views/help_screen.dart';
+import 'package:product_management/views/about_screen.dart';
 import 'widgets/app_shell.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart'; 
 import 'dart:io'; 
@@ -114,6 +115,8 @@ class _AppRouter extends StatelessWidget {
         return const MaintenanceScreen();
       case 'help':
         return const HelpScreen();
+      case 'about':
+        return const AboutScreen();
       default:
         return const DashboardScreen();
     }

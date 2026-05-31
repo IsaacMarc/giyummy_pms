@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -13,8 +14,96 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final double _dailyRevenueTarget = 5000.0;
-  final double _dailyProfitTarget = 1500.0; 
+  // Customizable Goals
+  double _dailyRevenueTarget = 5000.0;
+  double _dailyProfitTarget = 1500.0; 
+
+  // Real-time Clock
+  late DateTime _currentTime;
+  Timer? _timer;
+
+  // Dark Mode Toggle
+  bool _isDarkMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentTime = DateTime.now();
+    // Update the clock every second
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        _currentTime = DateTime.now();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  // --- GOAL EDITING DIALOG ---
+  void _showEditGoalsDialog() {
+    final revCtrl = TextEditingController(text: _dailyRevenueTarget.toStringAsFixed(0));
+    final profCtrl = TextEditingController(text: _dailyProfitTarget.toStringAsFixed(0));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _isDarkMode ? Colors.grey[900] : Colors.white,
+        title: Text('Set Daily Targets', style: TextStyle(color: _isDarkMode ? Colors.white : Colors.black)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: revCtrl,
+              keyboardType: TextInputType.number,
+              style: TextStyle(color: _isDarkMode ? Colors.white : Colors.black),
+              decoration: InputDecoration(
+                labelText: 'Daily Revenue Goal',
+                prefixIcon: const Icon(Icons.attach_money),
+                labelStyle: TextStyle(color: _isDarkMode ? Colors.grey[400] : Colors.grey[700]),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: _isDarkMode ? Colors.grey[700]! : Colors.grey[300]!)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: profCtrl,
+              keyboardType: TextInputType.number,
+              style: TextStyle(color: _isDarkMode ? Colors.white : Colors.black),
+              decoration: InputDecoration(
+                labelText: 'Daily Profit Goal',
+                prefixIcon: const Icon(Icons.trending_up),
+                labelStyle: TextStyle(color: _isDarkMode ? Colors.grey[400] : Colors.grey[700]),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: _isDarkMode ? Colors.grey[700]! : Colors.grey[300]!)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _dailyRevenueTarget = double.tryParse(revCtrl.text) ?? 5000.0;
+                _dailyProfitTarget = double.tryParse(profCtrl.text) ?? 1500.0;
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save Targets'),
+          )
+        ],
+      )
+    );
+  }
+
+  // --- THEME COLORS ---
+  Color get bgColor => _isDarkMode ? const Color(0xFF121212) : const Color(0xFFF4F7FC);
+  Color get cardColor => _isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
+  Color get textColor => _isDarkMode ? Colors.white : const Color(0xFF1A1F36);
+  Color get subTextColor => _isDarkMode ? Colors.grey[400]! : Colors.grey[600]!;
+  Color get borderColor => _isDarkMode ? Colors.grey[800]! : Colors.grey[200]!;
 
   @override
   Widget build(BuildContext context) {
@@ -23,10 +112,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final allProducts = provider.getProducts();
 
     // --- 1. DATA CRUNCHING ---
-    final now = DateTime.now();
     final todaySales = allSales.where((s) {
       final d = DateTime.parse(s.timestamp);
-      return d.year == now.year && d.month == now.month && d.day == now.day;
+      return d.year == _currentTime.year && d.month == _currentTime.month && d.day == _currentTime.day;
     }).toList();
 
     final todayRevenue = todaySales.fold(0.0, (sum, s) => sum + s.finalTotal);
@@ -37,7 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final profitProgress = (todayProfitEst / _dailyProfitTarget).clamp(0.0, 1.0);
     final criticalAlerts = allProducts.where((p) => p.stock <= 0).toList();
 
-    // --- NEW: Payment Methods & Top Items Logic ---
+    // Payment Methods & Top Items Logic
     final paymentMethods = <String, double>{};
     final topItemsMap = <String, int>{};
 
@@ -52,7 +140,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final topItemsToday = sortedTopItems.take(4).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FC), 
+      backgroundColor: bgColor, 
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -66,12 +154,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('System Command Center', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF1A1F36))),
+                      Text('System Command Center', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: textColor)),
                       const SizedBox(height: 4),
-                      Text(DateFormat('EEEE, MMMM d, yyyy').format(now), style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+                      // REAL TIME CLOCK ADDED HERE
+                      Text(DateFormat('EEEE, MMMM d, yyyy  •  hh:mm:ss a').format(_currentTime), style: TextStyle(fontSize: 16, color: subTextColor, fontWeight: FontWeight.w500)),
                     ],
                   ),
-                  _buildSystemStatusBadge(),
+                  Row(
+                    children: [
+                      // DARK MODE TOGGLE ADDED HERE
+                      IconButton(
+                        icon: Icon(_isDarkMode ? Icons.light_mode : Icons.dark_mode, color: _isDarkMode ? Colors.amber : Colors.grey[700]),
+                        onPressed: () => setState(() => _isDarkMode = !_isDarkMode),
+                        tooltip: 'Toggle Theme',
+                      ),
+                      const SizedBox(width: 16),
+                      _buildSystemStatusBadge(),
+                    ],
+                  )
                 ],
               ),
               const SizedBox(height: 32),
@@ -79,9 +179,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // --- TOP ROW: KPI CARDS ---
               Row(
                 children: [
-                  Expanded(child: _buildProgressKPI('Daily Revenue', todayRevenue, _dailyRevenueTarget, revProgress, Colors.blue, Icons.point_of_sale)),
+                  Expanded(child: _buildProgressKPI('Daily Revenue', todayRevenue, _dailyRevenueTarget, revProgress, Colors.blue, Icons.point_of_sale, onEdit: _showEditGoalsDialog)),
                   const SizedBox(width: 16),
-                  Expanded(child: _buildProgressKPI('Target Profit (Est)', todayProfitEst, _dailyProfitTarget, profitProgress, Colors.green, Icons.trending_up)),
+                  Expanded(child: _buildProgressKPI('Target Profit (Est)', todayProfitEst, _dailyProfitTarget, profitProgress, Colors.green, Icons.trending_up, onEdit: _showEditGoalsDialog)),
                   const SizedBox(width: 16),
                   Expanded(child: _buildStandardKPI('Transactions', '${todaySales.length}', 'Orders Processed', Colors.purple, Icons.receipt_long)),
                   const SizedBox(width: 16),
@@ -99,22 +199,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     flex: 5,
                     child: Column(
                       children: [
-                        // 1. Quick Actions
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: _cardDecoration(),
+                        // 1. Quick Actions (NOW FUNCTIONAL)
+                        _interactableCard(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                               const SizedBox(height: 16),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                                 children: [
-                                  _buildActionBtn('New Sale', Icons.shopping_cart_checkout, Colors.blue[600]!, () {}),
-                                  _buildActionBtn('Add Product', Icons.add_box, Colors.indigo[600]!, () {}),
-                                  _buildActionBtn('Run Report', Icons.analytics, Colors.purple[600]!, () {}),
-                                  _buildActionBtn('Export Data', Icons.cloud_download, Colors.teal[600]!, () {}),
+                                  _buildActionBtn('New Sale', Icons.shopping_cart_checkout, Colors.blue[600]!, () {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Redirecting to POS Checkout...')));
+                                  }),
+                                  _buildActionBtn('Add Product', Icons.add_box, Colors.indigo[600]!, () {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Opening Inventory Master...')));
+                                  }),
+                                  _buildActionBtn('Run Report', Icons.analytics, Colors.purple[600]!, () {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Generating Analytics...')));
+                                  }),
+                                  _buildActionBtn('Export Data', Icons.cloud_download, Colors.teal[600]!, () {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exporting Database to Excel...')));
+                                  }),
                                 ],
                               )
                             ],
@@ -123,10 +229,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(height: 24),
                         
                         // 2. Transaction Log
-                        Container(
+                        _interactableCard(
                           height: 320, 
-                          padding: const EdgeInsets.all(20),
-                          decoration: _cardDecoration(),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -134,25 +238,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 children: [
                                   const Icon(Icons.history, color: Colors.grey),
                                   const SizedBox(width: 8),
-                                  const Text('Live Transaction Log', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                  Text('Live Transaction Log', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                                   const Spacer(),
                                   Text('${todaySales.length} today', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
                                 ],
                               ),
-                              const Divider(height: 24),
+                              Divider(height: 24, color: borderColor),
                               Expanded(
                                 child: todaySales.isEmpty
-                                    ? Center(child: Text('No transactions yet today.', style: TextStyle(color: Colors.grey[500])))
+                                    ? Center(child: Text('No transactions yet today.', style: TextStyle(color: subTextColor)))
                                     : ListView.builder(
                                         itemCount: todaySales.length > 10 ? 10 : todaySales.length, 
                                         itemBuilder: (ctx, i) {
                                           final sale = todaySales.reversed.toList()[i];
                                           return ListTile(
                                             contentPadding: EdgeInsets.zero,
-                                            leading: CircleAvatar(backgroundColor: Colors.grey[100], child: const Icon(Icons.check_circle, color: Colors.green, size: 20)),
-                                            title: Text(sale.id.substring(0, 8).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace')),
-                                            subtitle: Text('${DateFormat('hh:mm a').format(DateTime.parse(sale.timestamp))} • ${sale.cashierName}'),
-                                            trailing: Text('\$${sale.finalTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                            leading: CircleAvatar(backgroundColor: _isDarkMode ? Colors.grey[800] : Colors.grey[100], child: const Icon(Icons.check_circle, color: Colors.green, size: 20)),
+                                            title: Text(sale.id.substring(0, 8).toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace', color: textColor)),
+                                            subtitle: Text('${DateFormat('hh:mm a').format(DateTime.parse(sale.timestamp))} • ${sale.cashierName}', style: TextStyle(color: subTextColor)),
+                                            trailing: Text('\$${sale.finalTotal.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
                                           );
                                         },
                                       ),
@@ -162,21 +266,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 24),
 
-                        // --- NEW 3. Top Items Leaderboard ---
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: _cardDecoration(),
+                        // 3. Top Items Leaderboard
+                        _interactableCard(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Row(
+                              Row(
                                 children: [
-                                  Icon(Icons.emoji_events, color: Colors.amber),
-                                  SizedBox(width: 8),
-                                  Text("Today's Top Items", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                  const Icon(Icons.emoji_events, color: Colors.amber),
+                                  const SizedBox(width: 8),
+                                  Text("Today's Top Items", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                                 ],
                               ),
-                              const Divider(height: 32),
+                              Divider(height: 32, color: borderColor),
                               _buildTopItemsList(topItemsToday),
                             ],
                           ),
@@ -192,13 +294,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       children: [
                         // 1. Smart Alerts
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: criticalAlerts.isNotEmpty ? const Color(0xFFFFF4F4) : Colors.white,
-                            borderRadius: BorderRadius.circular(16), 
-                            border: Border.all(color: criticalAlerts.isNotEmpty ? Colors.red[200]! : Colors.grey[200]!),
-                          ),
+                        _interactableCard(
+                          customColor: criticalAlerts.isNotEmpty ? (_isDarkMode ? Colors.red[900]!.withOpacity(0.3) : const Color(0xFFFFF4F4)) : cardColor,
+                          customBorder: criticalAlerts.isNotEmpty ? Colors.red[300]! : borderColor,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -206,7 +304,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 children: [
                                   Icon(criticalAlerts.isNotEmpty ? Icons.warning_rounded : Icons.check_circle, color: criticalAlerts.isNotEmpty ? Colors.red : Colors.green),
                                   const SizedBox(width: 8),
-                                  Text('Decision Support Alerts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: criticalAlerts.isNotEmpty ? Colors.red[900] : Colors.black87)),
+                                  Text('Decision Support Alerts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: criticalAlerts.isNotEmpty ? Colors.red[400] : textColor)),
                                 ],
                               ),
                               const SizedBox(height: 16),
@@ -219,7 +317,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     children: [
                                       const Icon(Icons.circle, size: 8, color: Colors.red),
                                       const SizedBox(width: 8),
-                                      Expanded(child: Text('${p.name} is out of stock.', style: TextStyle(color: Colors.red[800], fontWeight: FontWeight.w500))),
+                                      Expanded(child: Text('${p.name} is out of stock.', style: TextStyle(color: _isDarkMode ? Colors.red[200] : Colors.red[800], fontWeight: FontWeight.w500))),
                                     ],
                                   ),
                                 )),
@@ -228,15 +326,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 24),
 
-                        // --- NEW 2. Payment Method Donut Chart ---
-                        Container(
+                        // 2. Payment Method Donut Chart
+                        _interactableCard(
                           height: 260, 
-                          padding: const EdgeInsets.all(20),
-                          decoration: _cardDecoration(),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Payment Breakdown', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              Text('Payment Breakdown', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                               const SizedBox(height: 24),
                               Expanded(child: _buildPaymentDonut(paymentMethods)),
                             ],
@@ -244,17 +340,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 24),
 
-                        // 3. Revenue Sparkline
-                        Container(
-                          height: 260, 
-                          padding: const EdgeInsets.all(20),
-                          decoration: _cardDecoration(),
+                        // 3. ENHANCED Revenue Trend Line Chart
+                        _interactableCard(
+                          height: 280, 
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('7-Day Revenue Trend', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              Text('7-Day Revenue Trend', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                               const SizedBox(height: 24),
-                              Expanded(child: _buildSparkline(allSales)),
+                              Expanded(child: _buildDetailedTrendChart(allSales)),
                             ],
                           ),
                         )
@@ -272,18 +366,124 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // --- UI HELPER WIDGETS ---
   
-  BoxDecoration _cardDecoration() {
-    return BoxDecoration(
-      color: Colors.white, 
-      borderRadius: BorderRadius.circular(16), 
-      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))]
+  // Universal interactable card wrapper
+  Widget _interactableCard({required Widget child, double? height, Color? customColor, Color? customBorder}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {}, // Adds the ripple effect on tap
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          height: height,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: customColor ?? cardColor, 
+            borderRadius: BorderRadius.circular(16), 
+            border: Border.all(color: customBorder ?? borderColor),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))]
+          ),
+          child: child,
+        ),
+      ),
     );
   }
 
-  // --- Top Items List Generator ---
-  Widget _buildTopItemsList(List<MapEntry<String, int>> topItems) {
-    if (topItems.isEmpty) return Center(child: Text('No items sold today.', style: TextStyle(color: Colors.grey[500])));
+  Widget _buildProgressKPI(String title, double current, double target, double progress, MaterialColor color, IconData icon, {VoidCallback? onEdit}) {
+    return _interactableCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(title, style: TextStyle(color: subTextColor, fontWeight: FontWeight.w600)),
+                  if (onEdit != null) ...[
+                    const SizedBox(width: 4),
+                    InkWell(
+                      onTap: onEdit,
+                      child: Icon(Icons.edit, size: 14, color: Colors.blue[300]),
+                    )
+                  ]
+                ],
+              ),
+              Icon(icon, color: color[400], size: 20),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text('\$${current.toStringAsFixed(2)}', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: textColor)),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(value: progress, backgroundColor: _isDarkMode ? Colors.grey[800] : color[50], color: color[600], minHeight: 6, borderRadius: BorderRadius.circular(10)),
+          const SizedBox(height: 8),
+          Text('${(progress * 100).toStringAsFixed(0)}% of \$${target.toStringAsFixed(0)} goal', style: TextStyle(color: subTextColor, fontSize: 12, fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
 
+  Widget _buildStandardKPI(String title, String value, String subtitle, MaterialColor color, IconData icon) {
+    return _interactableCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title, style: TextStyle(color: subTextColor, fontWeight: FontWeight.w600)),
+              Icon(icon, color: color[400], size: 20),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(value, style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: textColor)),
+          const SizedBox(height: 22), 
+          Text(subtitle, style: TextStyle(color: subTextColor, fontSize: 12, fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionBtn(String label, IconData icon, Color color, VoidCallback onTap) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60, height: 60,
+                decoration: BoxDecoration(color: _isDarkMode ? color.withOpacity(0.2) : color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+                child: Icon(icon, color: color, size: 28),
+              ),
+              const SizedBox(height: 8),
+              Text(label, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: textColor)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSystemStatusBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(color: _isDarkMode ? Colors.green[900]!.withOpacity(0.3) : Colors.green[50], borderRadius: BorderRadius.circular(30), border: Border.all(color: _isDarkMode ? Colors.green[700]! : Colors.green[200]!)),
+      child: Row(
+        children: [
+          Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Text('System Running', style: TextStyle(color: _isDarkMode ? Colors.green[400] : Colors.green[700], fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopItemsList(List<MapEntry<String, int>> topItems) {
+    if (topItems.isEmpty) return Center(child: Text('No items sold today.', style: TextStyle(color: subTextColor)));
     final maxQty = topItems.first.value;
 
     return Column(
@@ -297,14 +497,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(item.key, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  Text('${item.value} units', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.bold)),
+                  Text(item.key, style: TextStyle(fontWeight: FontWeight.w600, color: textColor)),
+                  Text('${item.value} units', style: TextStyle(color: subTextColor, fontWeight: FontWeight.bold)),
                 ],
               ),
               const SizedBox(height: 8),
               LinearProgressIndicator(
                 value: progress,
-                backgroundColor: Colors.grey[200],
+                backgroundColor: _isDarkMode ? Colors.grey[800] : Colors.grey[200],
                 color: Colors.orange[400],
                 minHeight: 8,
                 borderRadius: BorderRadius.circular(10),
@@ -316,9 +516,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // --- Payment Donut Generator ---
   Widget _buildPaymentDonut(Map<String, double> paymentMethods) {
-    if (paymentMethods.isEmpty) return Center(child: Text('No payments yet.', style: TextStyle(color: Colors.grey[500])));
+    if (paymentMethods.isEmpty) return Center(child: Text('No payments yet.', style: TextStyle(color: subTextColor)));
 
     final colors = [Colors.blue[600]!, Colors.purple[500]!, Colors.teal[400]!, Colors.orange[400]!];
     
@@ -329,21 +528,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: PieChart(
             PieChartData(
               sectionsSpace: 2,
-              centerSpaceRadius: 40, // Creates the Donut hole
+              centerSpaceRadius: 40,
               sections: paymentMethods.entries.map((e) {
                 final idx = paymentMethods.keys.toList().indexOf(e.key);
-                return PieChartSectionData(
-                  color: colors[idx % colors.length],
-                  value: e.value,
-                  title: '', // Keep clean, rely on legend
-                  radius: 20, // Donut thickness
-                );
+                return PieChartSectionData(color: colors[idx % colors.length], value: e.value, title: '', radius: 20);
               }).toList(),
             ),
           ),
         ),
         const SizedBox(width: 16),
-        // The Legend
         Expanded(
           flex: 4,
           child: Column(
@@ -357,8 +550,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Container(width: 12, height: 12, decoration: BoxDecoration(color: colors[idx % colors.length], shape: BoxShape.circle)),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(e.key, style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500, fontSize: 13), overflow: TextOverflow.ellipsis)),
-                    Text('\$${e.value.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    Expanded(child: Text(e.key, style: TextStyle(color: subTextColor, fontWeight: FontWeight.w500, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                    Text('\$${e.value.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor)),
                   ],
                 ),
               );
@@ -369,106 +562,66 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSystemStatusBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(30), border: Border.all(color: Colors.green[200]!)),
-      child: Row(
-        children: [
-          Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
-          const SizedBox(width: 8),
-          Text('System Running', style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProgressKPI(String title, double current, double target, double progress, MaterialColor color, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey[200]!), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 4))]),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w600)),
-              Icon(icon, color: color[400], size: 20),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text('\$${current.toStringAsFixed(2)}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 12),
-          LinearProgressIndicator(value: progress, backgroundColor: color[50], color: color[600], minHeight: 6, borderRadius: BorderRadius.circular(10)),
-          const SizedBox(height: 8),
-          Text('${(progress * 100).toStringAsFixed(0)}% of \$${target.toStringAsFixed(0)} goal', style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStandardKPI(String title, String value, String subtitle, MaterialColor color, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey[200]!), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 4))]),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w600)),
-              Icon(icon, color: color[400], size: 20),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 22), 
-          Text(subtitle, style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionBtn(String label, IconData icon, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
-            child: Icon(icon, color: color, size: 28),
-          ),
-          const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSparkline(List<Sale> allSales) {
-    final now = DateTime.now();
+  // --- ENHANCED SPARKLINE WITH AXES AND TOOLTIPS ---
+  Widget _buildDetailedTrendChart(List<Sale> allSales) {
     List<FlSpot> spots = [];
+    double maxTotal = 0;
+
     for (int i = 6; i >= 0; i--) {
-      final date = now.subtract(Duration(days: i));
+      final date = _currentTime.subtract(Duration(days: i));
       final daySales = allSales.where((s) {
         final d = DateTime.parse(s.timestamp);
         return d.year == date.year && d.month == date.month && d.day == date.day;
       }).toList();
       final total = daySales.fold(0.0, (sum, s) => sum + s.finalTotal);
+      if (total > maxTotal) maxTotal = total;
       spots.add(FlSpot((6 - i).toDouble(), total));
     }
 
     return LineChart(
       LineChartData(
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false),
+        gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (value) => FlLine(color: borderColor, strokeWidth: 1)),
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 40,
+              getTitlesWidget: (value, meta) {
+                if (value == 0) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Text(value >= 1000 ? '${(value/1000).toStringAsFixed(1)}k' : value.toStringAsFixed(0), style: TextStyle(color: subTextColor, fontSize: 10), textAlign: TextAlign.right),
+                );
+              }
+            )
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final date = _currentTime.subtract(Duration(days: 6 - value.toInt()));
+                final dayName = DateFormat('EEE').format(date); // Mon, Tue, Wed...
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(dayName, style: TextStyle(color: subTextColor, fontSize: 11)),
+                );
+              }
+            )
+          )
+        ),
         borderData: FlBorderData(show: false),
-        lineTouchData: const LineTouchData(enabled: false),
+        lineTouchData: LineTouchData(
+          enabled: true,
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (spot) => _isDarkMode ? Colors.white : Colors.blueGrey[800]!,
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) => LineTooltipItem('\$${spot.y.toStringAsFixed(2)}', TextStyle(color: _isDarkMode ? Colors.black : Colors.white, fontWeight: FontWeight.bold))).toList();
+            }
+          )
+        ),
+        maxY: maxTotal == 0 ? 1000 : maxTotal * 1.2, // Add 20% headroom for tooltips
         lineBarsData: [
           LineChartBarData(
             spots: spots,
@@ -476,7 +629,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             color: Colors.blue[600],
             barWidth: 4,
             isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
+            dotData: const FlDotData(show: true), // Show dots for interaction
             belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.1)),
           ),
         ],

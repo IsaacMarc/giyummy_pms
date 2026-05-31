@@ -51,14 +51,15 @@ class _Sidebar extends StatelessWidget {
         const _NavItem('reports', 'Reports', Icons.bar_chart_outlined),
         
       const _NavItem('alerts', 'Alerts', Icons.notifications_outlined),
-      const _NavItem('profile', 'Profile', Icons.person_outline),
-      const _NavItem('help', 'Help', Icons.help_outline),
-      
       // 2. Group Maintenance and Users together as Admin-only modules
       if (user?.role == 'Admin') ...[
         const _NavItem('maintenance', 'Maintenance', Icons.build_outlined),
         const _NavItem('users', 'Users', Icons.manage_accounts_outlined),
       ],
+
+      const _NavItem('profile', 'Profile', Icons.person_outline),
+      const _NavItem('help', 'Help', Icons.help_outline),
+      const _NavItem('about', 'About', Icons.info_outline_rounded),
     ];
 
     return Container(
@@ -163,6 +164,7 @@ class _TopBar extends StatelessWidget {
     'maintenance': 'Maintenance',
     'help': 'Help',
     'users': 'User Management',
+    'about': "About"
   };
 
   @override
