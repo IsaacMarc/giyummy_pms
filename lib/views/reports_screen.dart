@@ -909,7 +909,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     return LineChart(
       LineChartData(
-        gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 5000),
+        gridData: const FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 5000),
         titlesData: const FlTitlesData(topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false))),
         borderData: FlBorderData(show: false),
         lineBarsData: [

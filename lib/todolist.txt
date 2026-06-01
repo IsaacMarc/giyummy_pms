@@ -44,4 +44,4 @@ ISSUES: 95% done when finished
 - no option yet for sales to print,
 - add a more detailed reciept
 - add AES encryption for backup data
-
+ - 

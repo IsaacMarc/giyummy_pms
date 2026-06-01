@@ -507,9 +507,9 @@ class _SalesScreenState extends State<SalesScreen> {
                           child: const Row(
                             children: [
                               Expanded(flex: 3, child: Text('ITEM', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
-                              Expanded(flex: 1, child: Text('PRICE', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
-                              Expanded(flex: 2, child: Center(child: Text('QTY', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)))),
-                              Expanded(flex: 1, child: Align(alignment: Alignment.centerRight, child: Text('TOTAL', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)))),
+                              Expanded(flex: 1, child: Text('PRICE', style:  TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
+                              Expanded(flex: 2, child: Center(child: Text('QTY', style:  TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)))),
+                              Expanded(flex: 1, child: Align(alignment: Alignment.centerRight, child: Text('TOTAL', style:  TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)))),
                             ],
                           ),
                         ),

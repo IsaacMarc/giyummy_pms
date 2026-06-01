@@ -92,6 +92,7 @@ class StorageService {
     await db.delete('products', where: 'id = ?', whereArgs: [id]);
   }
   
+  
   // ─── Audit Logs ───────────────────────────────────────────────────
 
   Future<List<AuditLog>> getAuditLogs() async {
@@ -135,6 +136,7 @@ class StorageService {
     return {
       'users': await db.query('users'),
       'products': await db.query('products'),
+      'batches': await db.query('batches'), 
       'sales': await db.query('sales'),
       'alerts': await db.query('alerts'),
       'audit_logs': await db.query('audit_logs'),
@@ -172,7 +174,7 @@ class StorageService {
     final db = await DatabaseService.instance.database;
 
     await db.transaction((txn) async {
-      final tables = ['users', 'products', 'sales', 'alerts', 'audit_logs', 'backups'];
+      final tables = ['users', 'products', 'batches', 'sales', 'alerts', 'audit_logs', 'backups'];
       
       for (final table in tables) {
         if (data.containsKey(table)) {
@@ -210,6 +212,46 @@ class StorageService {
         }
       }
     });
+  }
+
+  // ─── Batches ──────────────────────────────────────────────────────
+
+  Future<List<ProductBatch>> getBatches() async {
+    final db = await DatabaseService.instance.database;
+    try {
+      final result = await db.query('batches');
+      return result.map((row) => ProductBatch.fromMap(row)).toList();
+    } catch (e) {
+      // If the batches table hasn't been created yet, just return an empty list
+      return [];
+    }
+  }
+
+  Future<void> insertBatch(ProductBatch batch) async {
+    final db = await DatabaseService.instance.database;
+    
+    // Safety check: Create the table on-the-fly if it doesn't exist yet
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS batches(
+          id TEXT PRIMARY KEY,
+          productId TEXT,
+          supplier TEXT,
+          restockReason TEXT,
+          expirationDate TEXT,
+          quantity INTEGER,
+          cost REAL
+        )
+      ''');
+    } catch (_) {
+      // Ignore if table already exists
+    }
+
+    await db.insert(
+      'batches',
+      batch.toMap(), 
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   // ─── Sales ────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:product_management/models/models.dart';
 import 'package:product_management/services/auth_service.dart';
@@ -23,21 +23,68 @@ class AppProvider extends ChangeNotifier {
   List<Alert> _alerts = [];
   List<AuditLog> _auditLogs = [];
   List<Backup> _backups = [];
+  List<ProductBatch> _batches = [];
 
   User? get currentUser => _currentUser;
   String get currentPage => _currentPage;
   bool get isLoggedIn => _currentUser != null;
 
 
+  ThemeMode _themeMode = ThemeMode.light;
+  ThemeMode get themeMode => _themeMode;
 
+  void toggleTheme() {
+    _themeMode = _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+    notifyListeners();
+  }
+  
   Future<void> loadData() async {
     // Your existing data fetching...
     _users = await _storage.getUsers();
     _products = await _storage.getProducts();
     _sales = await _storage.getSales();
-    
+    _batches = await _storage.getBatches();
     // ---> ADD THIS MISSING LINE <---
     _auditLogs = await _storage.getAuditLogs(); 
+    
+    notifyListeners();
+  }
+
+List<ProductBatch> getBatchesForProduct(String productId) {
+    return _batches.where((b) => b.productId == productId).toList();
+}
+
+ Future<void> addBatchAndRestock(ProductBatch batch, Product product) async {
+    // 1. Save to Database (FIXED: Changed _dbService to _storage)
+    await _storage.insertBatch(batch);
+    
+    // 2. Add to local memory
+    _batches.add(batch);
+    
+    // 3. Update the Master Product automatically!
+    product.stock += batch.quantity;
+    product.updatedAt = DateTime.now().toIso8601String();
+    if (product.status == 'Expired' || product.status == 'Out of Stock') {
+      product.autoDispose = false; 
+    }
+    
+    // 4. Save product changes
+    await updateProduct(product); 
+    notifyListeners();
+  }
+
+  Future<void> updateBatchInfo(ProductBatch batch, Product product, int oldQuantity) async {
+    // 1. Save modified batch back to SQLite
+    await _storage.insertBatch(batch); 
+    
+    // 2. Adjust the master stock if the user corrected a typo in the quantity
+    final stockDifference = batch.quantity - oldQuantity;
+    if (stockDifference != 0) {
+      product.stock += stockDifference;
+      if (product.stock < 0) product.stock = 0;
+      product.updatedAt = DateTime.now().toIso8601String();
+      await updateProduct(product); 
+    }
     
     notifyListeners();
   }
@@ -60,8 +107,9 @@ Future<void> restoreSession() async {
     _auditLogs = await _storage.getAuditLogs();
     _backups = await _storage.getBackups();
     
-    _sales = await _storage.getSales(); // Uncomment when you create the Sales table
-    _alerts = await _storage.getAlerts(); // Uncomment when you create the Alerts table
+    _sales = await _storage.getSales(); 
+    _alerts = await _storage.getAlerts(); 
+    _batches = await _storage.getBatches();
 
     isInitialized = true;
     notifyListeners();
@@ -265,25 +313,32 @@ Future<void> restoreSession() async {
   }
 
   Future<void> _processExpirations() async {
-    bool changesMade = false;
-    for (var p in _products) {
-      if (p.expirationDate != null && p.stock > 0) {
-        final expDate = DateTime.parse(p.expirationDate!);
+      bool changesMade = false;
+      for (var p in _products) {
+        final activeBatches = getBatchesForProduct(p.id).where((b) => b.quantity > 0).toList();
+        if (activeBatches.isEmpty) continue;
         
-        // If expired AND autoDispose is turned on
-        if (DateTime.now().isAfter(expDate) && p.autoDispose) {
-          final dumpedAmount = p.stock;
-          p.stock = 0; // Dump the expired stock
-          p.updatedAt = DateTime.now().toIso8601String();
+        for (var batch in activeBatches) {
+          final expDate = DateTime.parse(batch.expirationDate);
           
-          await _storage.saveProduct(p);
-          await _addAuditLog('DISPOSE', 'Inventory', 'Auto-dumped $dumpedAmount expired units of ${p.name}');
-          changesMade = true;
+          // If expired AND autoDispose is turned on
+          if (DateTime.now().isAfter(expDate) && p.autoDispose) {
+            final dumpedAmount = batch.quantity;
+            p.stock -= dumpedAmount; // Deduct only this batch's stock
+            if (p.stock < 0) p.stock = 0;
+            
+            batch.quantity = 0; // Mark batch as empty so it doesn't trigger again
+            await _storage.insertBatch(batch); // Save updated batch
+            
+            p.updatedAt = DateTime.now().toIso8601String();
+            await _storage.saveProduct(p);
+            await _addAuditLog('DISPOSE', 'Inventory', 'Auto-dumped $dumpedAmount expired units of ${p.name} from a batch.');
+            changesMade = true;
+          }
         }
       }
+      if (changesMade) notifyListeners();
     }
-    if (changesMade) notifyListeners();
-  }
 
   Future<void> clearAllAlerts() async {
     _alerts.clear(); // Empty the in-memory list
@@ -293,18 +348,18 @@ Future<void> restoreSession() async {
     await _addAuditLog('DELETE', 'Alerts', 'Cleared all system notifications');
   }
 
-  Future<void> _generateStockAlerts() async {
+ Future<void> _generateStockAlerts() async {
     await _processExpirations();
-
-    // REMOVED the old existingProductAlerts check that was blocking escalations
 
     for (final product in _products) {
       Alert? newAlert;
       
-      // -- EXPIRATION ALERT LOGIC --
-      if (product.expirationDate != null && product.stock > 0) {
-        final expDate = DateTime.parse(product.expirationDate!);
-        final daysUntilExp = expDate.difference(DateTime.now()).inDays;
+      // -- NEW: SMART BATCH EXPIRATION SCANNER --
+      final activeBatches = getBatchesForProduct(product.id).where((b) => b.quantity > 0).toList();
+      if (activeBatches.isNotEmpty) {
+        activeBatches.sort((a, b) => DateTime.parse(a.expirationDate).compareTo(DateTime.parse(b.expirationDate)));
+        final nextExp = DateTime.parse(activeBatches.first.expirationDate);
+        final daysUntilExp = nextExp.difference(DateTime.now()).inDays;
 
         if (daysUntilExp < 0) {
           newAlert = Alert(id: _uuid.v4(), type: 'expired', severity: 'critical', message: 'EXPIRED: ${product.name} passed its expiration date. Please remove from shelves.', timestamp: DateTime.now().toIso8601String(), productId: product.id);
@@ -322,9 +377,8 @@ Future<void> restoreSession() async {
         }
       }
 
-      // -- NEW: SMART ALERT INJECTION --
+      // -- SMART ALERT INJECTION --
       if (newAlert != null) {
-        // Only save the alert if this EXACT message isn't already sitting unread in the inbox
         bool alreadyActive = _alerts.any((a) => 
             a.productId == product.id && 
             a.message == newAlert!.message && 

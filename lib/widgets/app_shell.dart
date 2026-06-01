@@ -16,7 +16,6 @@ class AppShell extends StatelessWidget {
           Expanded(
             child: Column(
               children: [
-                const _TopBar(),
                 Expanded(
                   child: Container(
                     color: const Color(0xFFF5F7FA),
@@ -145,80 +144,6 @@ class _Sidebar extends StatelessWidget {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TopBar extends StatelessWidget {
-  const _TopBar();
-
-  static const _titles = {
-    'dashboard': 'Dashboard',
-    'sales': 'Sales',
-    'inventory': 'Inventory',
-    'reports': 'Reports',
-    'alerts': 'Alerts',
-    'profile': 'Profile',
-    'maintenance': 'Maintenance',
-    'help': 'Help',
-    'users': 'User Management',
-    'about': "About"
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final provider = context.watch<AppProvider>();
-    final user = provider.currentUser;
-    final title = _titles[provider.currentPage] ?? 'Dashboard';
-
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: [
-          Text(
-            title,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const Spacer(),
-          if (user != null) ...[
-            CircleAvatar(
-              backgroundColor: Colors.blue[100],
-              radius: 18,
-              child: Text(
-                user.username[0].toUpperCase(),
-                style: TextStyle(
-                  color: Colors.blue[700],
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(user.username,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 14)),
-                Text(user.role,
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-              ],
-            ),
-          ],
         ],
       ),
     );

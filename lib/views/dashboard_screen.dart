@@ -12,7 +12,6 @@ class DashboardScreen extends StatefulWidget {
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
-
 class _DashboardScreenState extends State<DashboardScreen> {
   // Customizable Goals
   double _dailyRevenueTarget = 5000.0;
@@ -22,18 +21,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late DateTime _currentTime;
   Timer? _timer;
 
-  // Dark Mode Toggle
-  bool _isDarkMode = false;
-
   @override
   void initState() {
     super.initState();
     _currentTime = DateTime.now();
-    // Update the clock every second
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _currentTime = DateTime.now();
-      });
+      if (mounted) {
+        setState(() => _currentTime = DateTime.now());
+      }
     });
   }
 
@@ -45,38 +40,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // --- GOAL EDITING DIALOG ---
   void _showEditGoalsDialog() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final revCtrl = TextEditingController(text: _dailyRevenueTarget.toStringAsFixed(0));
     final profCtrl = TextEditingController(text: _dailyProfitTarget.toStringAsFixed(0));
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: _isDarkMode ? Colors.grey[900] : Colors.white,
-        title: Text('Set Daily Targets', style: TextStyle(color: _isDarkMode ? Colors.white : Colors.black)),
+        backgroundColor: isDark ? Colors.grey[900] : Colors.white,
+        title: Text('Set Daily Targets', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: revCtrl,
               keyboardType: TextInputType.number,
-              style: TextStyle(color: _isDarkMode ? Colors.white : Colors.black),
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
               decoration: InputDecoration(
                 labelText: 'Daily Revenue Goal',
                 prefixIcon: const Icon(Icons.attach_money),
-                labelStyle: TextStyle(color: _isDarkMode ? Colors.grey[400] : Colors.grey[700]),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: _isDarkMode ? Colors.grey[700]! : Colors.grey[300]!)),
+                labelStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[700]),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!)),
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: profCtrl,
               keyboardType: TextInputType.number,
-              style: TextStyle(color: _isDarkMode ? Colors.white : Colors.black),
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
               decoration: InputDecoration(
                 labelText: 'Daily Profit Goal',
                 prefixIcon: const Icon(Icons.trending_up),
-                labelStyle: TextStyle(color: _isDarkMode ? Colors.grey[400] : Colors.grey[700]),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: _isDarkMode ? Colors.grey[700]! : Colors.grey[300]!)),
+                labelStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[700]),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!)),
               ),
             ),
           ],
@@ -98,12 +94,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // --- THEME COLORS ---
-  Color get bgColor => _isDarkMode ? const Color(0xFF121212) : const Color(0xFFF4F7FC);
-  Color get cardColor => _isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
-  Color get textColor => _isDarkMode ? Colors.white : const Color(0xFF1A1F36);
-  Color get subTextColor => _isDarkMode ? Colors.grey[400]! : Colors.grey[600]!;
-  Color get borderColor => _isDarkMode ? Colors.grey[800]! : Colors.grey[200]!;
+  // --- DYNAMIC THEME COLORS ---
+  bool get isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get bgColor => isDark ? const Color(0xFF121212) : const Color(0xFFF4F7FC);
+  Color get cardColor => isDark ? const Color(0xFF1E1E1E) : Colors.white;
+  Color get textColor => isDark ? Colors.white : const Color(0xFF1A1F36);
+  Color get subTextColor => isDark ? Colors.grey[400]! : Colors.grey[600]!;
+  Color get borderColor => isDark ? Colors.grey[800]! : Colors.grey[200]!;
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +122,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final profitProgress = (todayProfitEst / _dailyProfitTarget).clamp(0.0, 1.0);
     final criticalAlerts = allProducts.where((p) => p.stock <= 0).toList();
 
-    // Payment Methods & Top Items Logic
     final paymentMethods = <String, double>{};
     final topItemsMap = <String, int>{};
 
@@ -156,17 +152,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       Text('System Command Center', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: textColor)),
                       const SizedBox(height: 4),
-                      // REAL TIME CLOCK ADDED HERE
-                      Text(DateFormat('EEEE, MMMM d, yyyy  •  hh:mm:ss a').format(_currentTime), style: TextStyle(fontSize: 16, color: subTextColor, fontWeight: FontWeight.w500)),
+                      Row(
+                        children: [
+                          Icon(Icons.calendar_today, size: 16, color: subTextColor),
+                          const SizedBox(width: 8),
+                          Text(DateFormat('EEEE, MMMM d, yyyy').format(_currentTime), style: TextStyle(fontSize: 16, color: subTextColor, fontWeight: FontWeight.w500)),
+                          const SizedBox(width: 16),
+                          Icon(Icons.access_time, size: 16, color: Colors.blue[600]),
+                          const SizedBox(width: 6),
+                          Text(DateFormat('hh:mm:ss a').format(_currentTime), style: TextStyle(fontSize: 16, color: Colors.blue[600], fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     ],
                   ),
                   Row(
                     children: [
-                      // DARK MODE TOGGLE ADDED HERE
+                      // GLOBAL DARK MODE TOGGLE
                       IconButton(
-                        icon: Icon(_isDarkMode ? Icons.light_mode : Icons.dark_mode, color: _isDarkMode ? Colors.amber : Colors.grey[700]),
-                        onPressed: () => setState(() => _isDarkMode = !_isDarkMode),
-                        tooltip: 'Toggle Theme',
+                        icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode, color: isDark ? Colors.amber : Colors.grey[700]),
+                        onPressed: () => context.read<AppProvider>().toggleTheme(),
+                        tooltip: 'Toggle Global Theme',
                       ),
                       const SizedBox(width: 16),
                       _buildSystemStatusBadge(),
@@ -199,7 +204,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     flex: 5,
                     child: Column(
                       children: [
-                        // 1. Quick Actions (NOW FUNCTIONAL)
+                        // 1. Quick Actions
                         _interactableCard(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -207,22 +212,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                               const SizedBox(height: 16),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                children: [
-                                  _buildActionBtn('New Sale', Icons.shopping_cart_checkout, Colors.blue[600]!, () {
-                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Redirecting to POS Checkout...')));
-                                  }),
-                                  _buildActionBtn('Add Product', Icons.add_box, Colors.indigo[600]!, () {
-                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Opening Inventory Master...')));
-                                  }),
-                                  _buildActionBtn('Run Report', Icons.analytics, Colors.purple[600]!, () {
-                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Generating Analytics...')));
-                                  }),
-                                  _buildActionBtn('Export Data', Icons.cloud_download, Colors.teal[600]!, () {
-                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exporting Database to Excel...')));
-                                  }),
-                                ],
-                              )
+                                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                  children: [
+                                    _buildActionBtn('New Sale', Icons.shopping_cart_checkout, Colors.blue[600]!, 
+                                      () => context.read<AppProvider>().navigateTo('sales')), 
+                                      
+                                    _buildActionBtn('View Inventory', Icons.add_box, Colors.indigo[600]!, 
+                                      () => context.read<AppProvider>().navigateTo('inventory')), 
+                                      
+                                    _buildActionBtn('View Report', Icons.analytics, Colors.purple[600]!, 
+                                      () => context.read<AppProvider>().navigateTo('reports')), 
+                                      
+                                    _buildActionBtn('Export Data', Icons.cloud_download, Colors.teal[600]!, 
+                                      () => context.read<AppProvider>().navigateTo('maintenance')), 
+                                  ],
+                                )
                             ],
                           ),
                         ),
@@ -253,10 +257,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           final sale = todaySales.reversed.toList()[i];
                                           return ListTile(
                                             contentPadding: EdgeInsets.zero,
-                                            leading: CircleAvatar(backgroundColor: _isDarkMode ? Colors.grey[800] : Colors.grey[100], child: const Icon(Icons.check_circle, color: Colors.green, size: 20)),
+                                            leading: CircleAvatar(backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100], child: const Icon(Icons.check_circle, color: Colors.green, size: 20)),
                                             title: Text(sale.id.substring(0, 8).toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace', color: textColor)),
                                             subtitle: Text('${DateFormat('hh:mm a').format(DateTime.parse(sale.timestamp))} • ${sale.cashierName}', style: TextStyle(color: subTextColor)),
-                                            trailing: Text('\$${sale.finalTotal.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+                                            trailing: Text('₱${sale.finalTotal.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
                                           );
                                         },
                                       ),
@@ -295,7 +299,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         // 1. Smart Alerts
                         _interactableCard(
-                          customColor: criticalAlerts.isNotEmpty ? (_isDarkMode ? Colors.red[900]!.withOpacity(0.3) : const Color(0xFFFFF4F4)) : cardColor,
+                          customColor: criticalAlerts.isNotEmpty ? (isDark ? Colors.red[900]!.withOpacity(0.2) : const Color(0xFFFFF4F4)) : cardColor,
                           customBorder: criticalAlerts.isNotEmpty ? Colors.red[300]! : borderColor,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -317,7 +321,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     children: [
                                       const Icon(Icons.circle, size: 8, color: Colors.red),
                                       const SizedBox(width: 8),
-                                      Expanded(child: Text('${p.name} is out of stock.', style: TextStyle(color: _isDarkMode ? Colors.red[200] : Colors.red[800], fontWeight: FontWeight.w500))),
+                                      Expanded(child: Text('${p.name} is out of stock.', style: TextStyle(color: isDark ? Colors.red[200] : Colors.red[800], fontWeight: FontWeight.w500))),
                                     ],
                                   ),
                                 )),
@@ -366,12 +370,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // --- UI HELPER WIDGETS ---
   
-  // Universal interactable card wrapper
   Widget _interactableCard({required Widget child, double? height, Color? customColor, Color? customBorder}) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {}, // Adds the ripple effect on tap
+        onTap: () {}, 
         borderRadius: BorderRadius.circular(16),
         child: Container(
           height: height,
@@ -400,10 +403,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Text(title, style: TextStyle(color: subTextColor, fontWeight: FontWeight.w600)),
                   if (onEdit != null) ...[
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     InkWell(
                       onTap: onEdit,
-                      child: Icon(Icons.edit, size: 14, color: Colors.blue[300]),
+                      child: Icon(Icons.edit, size: 14, color: Colors.blue[400]),
                     )
                   ]
                 ],
@@ -412,11 +415,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Text('\$${current.toStringAsFixed(2)}', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: textColor)),
+          Text('₱${current.toStringAsFixed(2)}', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: textColor)),
           const SizedBox(height: 12),
-          LinearProgressIndicator(value: progress, backgroundColor: _isDarkMode ? Colors.grey[800] : color[50], color: color[600], minHeight: 6, borderRadius: BorderRadius.circular(10)),
+          LinearProgressIndicator(value: progress, backgroundColor: isDark ? Colors.grey[800] : color[50], color: color[600], minHeight: 6, borderRadius: BorderRadius.circular(10)),
           const SizedBox(height: 8),
-          Text('${(progress * 100).toStringAsFixed(0)}% of \$${target.toStringAsFixed(0)} goal', style: TextStyle(color: subTextColor, fontSize: 12, fontWeight: FontWeight.w500)),
+          Text('${(progress * 100).toStringAsFixed(0)}% of ₱${target.toStringAsFixed(0)} goal', style: TextStyle(color: subTextColor, fontSize: 12, fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -456,7 +459,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Container(
                 width: 60, height: 60,
-                decoration: BoxDecoration(color: _isDarkMode ? color.withOpacity(0.2) : color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+                decoration: BoxDecoration(color: isDark ? color.withOpacity(0.2) : color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
                 child: Icon(icon, color: color, size: 28),
               ),
               const SizedBox(height: 8),
@@ -471,12 +474,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildSystemStatusBadge() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(color: _isDarkMode ? Colors.green[900]!.withOpacity(0.3) : Colors.green[50], borderRadius: BorderRadius.circular(30), border: Border.all(color: _isDarkMode ? Colors.green[700]! : Colors.green[200]!)),
+      decoration: BoxDecoration(color: isDark ? Colors.green[900]!.withOpacity(0.3) : Colors.green[50], borderRadius: BorderRadius.circular(30), border: Border.all(color: isDark ? Colors.green[700]! : Colors.green[200]!)),
       child: Row(
         children: [
           Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
           const SizedBox(width: 8),
-          Text('System Running', style: TextStyle(color: _isDarkMode ? Colors.green[400] : Colors.green[700], fontWeight: FontWeight.bold)),
+          Text('System Running', style: TextStyle(color: isDark ? Colors.green[400] : Colors.green[700], fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -504,7 +507,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 8),
               LinearProgressIndicator(
                 value: progress,
-                backgroundColor: _isDarkMode ? Colors.grey[800] : Colors.grey[200],
+                backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
                 color: Colors.orange[400],
                 minHeight: 8,
                 borderRadius: BorderRadius.circular(10),
@@ -551,7 +554,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Container(width: 12, height: 12, decoration: BoxDecoration(color: colors[idx % colors.length], shape: BoxShape.circle)),
                     const SizedBox(width: 8),
                     Expanded(child: Text(e.key, style: TextStyle(color: subTextColor, fontWeight: FontWeight.w500, fontSize: 13), overflow: TextOverflow.ellipsis)),
-                    Text('\$${e.value.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor)),
+                    Text('₱${e.value.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor)),
                   ],
                 ),
               );
@@ -562,7 +565,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // --- ENHANCED SPARKLINE WITH AXES AND TOOLTIPS ---
   Widget _buildDetailedTrendChart(List<Sale> allSales) {
     List<FlSpot> spots = [];
     double maxTotal = 0;
@@ -615,13 +617,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         lineTouchData: LineTouchData(
           enabled: true,
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (spot) => _isDarkMode ? Colors.white : Colors.blueGrey[800]!,
+            getTooltipColor: (spot) => isDark ? Colors.white : Colors.blueGrey[800]!,
             getTooltipItems: (touchedSpots) {
-              return touchedSpots.map((spot) => LineTooltipItem('\$${spot.y.toStringAsFixed(2)}', TextStyle(color: _isDarkMode ? Colors.black : Colors.white, fontWeight: FontWeight.bold))).toList();
+              return touchedSpots.map((spot) => LineTooltipItem('₱${spot.y.toStringAsFixed(2)}', TextStyle(color: isDark ? Colors.black : Colors.white, fontWeight: FontWeight.bold))).toList();
             }
           )
         ),
-        maxY: maxTotal == 0 ? 1000 : maxTotal * 1.2, // Add 20% headroom for tooltips
+        maxY: maxTotal == 0 ? 1000 : maxTotal * 1.2, 
         lineBarsData: [
           LineChartBarData(
             spots: spots,
@@ -629,7 +631,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             color: Colors.blue[600],
             barWidth: 4,
             isStrokeCapRound: true,
-            dotData: const FlDotData(show: true), // Show dots for interaction
+            dotData: const FlDotData(show: true), 
             belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.1)),
           ),
         ],

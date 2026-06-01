@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:product_management/models/models.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
@@ -33,6 +34,16 @@ class DatabaseService {
         onCreate: _createDB,
       ),
     );
+  }
+  Future<void> insertBatch(ProductBatch batch) async {
+    final db = await database;
+    await db.insert('batches', batch.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<ProductBatch>> getBatches() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('batches');
+    return List.generate(maps.length, (i) => ProductBatch.fromMap(maps[i]));
   }
 
   Future _createDB(Database db, int version) async {
@@ -119,5 +130,18 @@ class DatabaseService {
         type TEXT NOT NULL      -- ADDED THIS LINE
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS batches(
+        id TEXT PRIMARY KEY,
+        productId TEXT,
+        supplier TEXT,
+        restockReason TEXT,
+        expirationDate TEXT,
+        quantity INTEGER,
+        cost REAL
+      )
+    ''');
   }
+  
 }

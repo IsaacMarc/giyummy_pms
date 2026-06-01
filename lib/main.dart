@@ -43,34 +43,69 @@ void main() async {
 class ProductManagementApp extends StatelessWidget {
   const ProductManagementApp({super.key});
 
-  @override
+@override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Product Management System',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        inputDecorationTheme: const InputDecorationTheme(
-          contentPadding:
-              EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        ),
-        cardTheme: CardThemeData(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+    // Using a Consumer guarantees that the MaterialApp has the correct 
+    // context to listen to the AppProvider for theme changes.
+    return Consumer<AppProvider>(
+      builder: (context, provider, child) {
+        return MaterialApp(
+          title: 'Product Management System',
+          debugShowCheckedModeBanner: false,
+          themeMode: provider.themeMode, // Safely reads the theme mode
+
+          // --- LIGHT THEME ---
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.blue,
+              brightness: Brightness.light,
+            ),
+            useMaterial3: true,
+            inputDecorationTheme: const InputDecorationTheme(
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            cardTheme: CardThemeData(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),  
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
           ),
-        ),  
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8)),
+
+          // --- DARK THEME ---
+          // Applying the same modern shapes and Material 3 guidelines to dark mode
+          darkTheme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.blue,
+              brightness: Brightness.dark,
+            ),
+            useMaterial3: true,
+            inputDecorationTheme: const InputDecorationTheme(
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            cardTheme: CardThemeData(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),  
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
-      home: const _AppRouter(),
+          
+          home: const _AppRouter(),
+        );
+      },
     );
   }
 }
