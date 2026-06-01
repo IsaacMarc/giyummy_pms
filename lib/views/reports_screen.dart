@@ -40,7 +40,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }).toList();
   }
 
-// --- NEW: PURCHASE ORDER PDF EXPORT ---
+// --- PURCHASE ORDER PDF EXPORT ---
   Future<void> _exportPOToPDF(List<Product> itemsToOrder) async {
     if (itemsToOrder.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -221,9 +221,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       // INVENTORY PDF
       pdf.addPage(
         pw.MultiPage(
-          // 1. FORCE LANDSCAPE
           pageFormat: PdfPageFormat.a4.landscape, 
-          // 2. REDUCE PAGE MARGINS
           margin: const pw.EdgeInsets.all(20), 
           build: (pw.Context context) {
             return [
@@ -238,14 +236,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 9),
                 headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF1A1F36)),
                 rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
-                
-                // 3. DROP FONT SIZE
                 cellStyle: const pw.TextStyle(fontSize: 8), 
-                
-                // 4. REDUCE CELL PADDING (Removes dead space between words)
                 cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6), 
-                
-                // 5. TIGHTEN COLUMN RATIOS
                 columnWidths: {
                   0: const pw.FlexColumnWidth(0.2), // Barcode
                   1: const pw.FlexColumnWidth(0.2), // Name
@@ -258,9 +250,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 },
                 cellAlignments: {
                   3: pw.Alignment.center, 
-                  4: pw.Alignment.center,      
-                  5: pw.Alignment.center,      
-                  6: pw.Alignment.center,      
+                  4: pw.Alignment.center,     
+                  5: pw.Alignment.center,     
+                  6: pw.Alignment.center,     
                 }
               ),
             ];
@@ -274,6 +266,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF121212) : const Color(0xFFF4F7FC);
+    final textColor = isDark ? Colors.white : const Color(0xFF1A1F36);
+    final subTextColor = isDark ? Colors.grey[400]! : Colors.grey[600]!;
+
     final provider = context.watch<AppProvider>();
     final allSales = provider.getSales();
     final allProducts = provider.getProducts();
@@ -281,7 +278,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final filteredSales = _getFilteredSales(allSales);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FC),
+      backgroundColor: bgColor,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -299,11 +296,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         children: [
                           Icon(Icons.analytics_outlined, color: Colors.blue[700], size: 28),
                           const SizedBox(width: 8),
-                          const Text('Reports & Analytics', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFF1A1F36))),
+                          Text('Reports & Analytics', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: textColor)),
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text('Export and analyze store data', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+                      Text('Export and analyze store data', style: TextStyle(fontSize: 14, color: subTextColor)),
                     ],
                   ),
                   Row(
@@ -311,13 +308,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       OutlinedButton.icon(
                         onPressed: () => _exportToPDF(filteredSales, allProducts),
                         icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
-                        label: const Text('PDF', style: TextStyle(color: Colors.black87)),
+                        label: Text('PDF', style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+                        style: OutlinedButton.styleFrom(side: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!)),
                       ),
                       const SizedBox(width: 12),
                       OutlinedButton.icon(
                         onPressed: _exportToExcel,
                         icon: const Icon(Icons.table_chart, color: Colors.green),
-                        label: const Text('Excel', style: TextStyle(color: Colors.black87)),
+                        label: Text('Excel', style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+                        style: OutlinedButton.styleFrom(side: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!)),
                       ),
                     ],
                   )
@@ -328,18 +327,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
               // --- TAB SELECTORS ---
               Row(
                 children: [
-                  _buildTabCard(0, 'Sales', 'Revenue, top items, payment breakdown', Icons.trending_up),
+                  _buildTabCard(0, 'Sales', 'Revenue, top items, payment breakdown', Icons.trending_up, isDark),
                   const SizedBox(width: 16),
-                  _buildTabCard(1, 'Inventory', 'Stock levels, value by category', Icons.inventory_2_outlined),
+                  _buildTabCard(1, 'Inventory', 'Stock levels, value by category', Icons.inventory_2_outlined, isDark),
                 ],
               ),
               const SizedBox(height: 24),
 
- // --- CONTENT RENDERER ---
+              // --- CONTENT RENDERER ---
               _selectedTab == 0 
-                  ? _buildSalesView(filteredSales) 
-                  // --- NEW: Passing allSales here for accurate Dead Stock calculation ---
-                  : _buildInventoryView(allProducts, filteredSales, allSales),
+                  ? _buildSalesView(filteredSales, isDark, textColor, subTextColor) 
+                  : _buildInventoryView(allProducts, filteredSales, allSales, isDark, textColor, subTextColor),
             ],
           ),
         ),
@@ -348,7 +346,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   // --- TAB UI COMPONENT ---
-  Widget _buildTabCard(int index, String title, String subtitle, IconData icon) {
+  Widget _buildTabCard(int index, String title, String subtitle, IconData icon, bool isDark) {
     final isSelected = _selectedTab == index;
     return Expanded(
       child: InkWell(
@@ -357,18 +355,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.blue[50] : Colors.white,
+            color: isSelected ? (isDark ? Colors.blue[900]!.withOpacity(0.2) : Colors.blue[50]) : (isDark ? const Color(0xFF1E1E1E) : Colors.white),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isSelected ? Colors.blue[300]! : Colors.grey[200]!, width: isSelected ? 1.5 : 1),
+            border: Border.all(color: isSelected ? Colors.blue[500]! : (isDark ? Colors.grey[800]! : Colors.grey[200]!), width: isSelected ? 1.5 : 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: isSelected ? Colors.blue[700] : Colors.grey[600]),
+              Icon(icon, color: isSelected ? (isDark ? Colors.blue[300] : Colors.blue[700]) : (isDark ? Colors.grey[400] : Colors.grey[600])),
               const SizedBox(height: 12),
-              Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isSelected ? Colors.blue[900] : Colors.black87)),
+              Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isSelected ? (isDark ? Colors.blue[300] : Colors.blue[900]) : (isDark ? Colors.white : Colors.black87))),
               const SizedBox(height: 4),
-              Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+              Text(subtitle, style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[500] : Colors.grey[600])),
             ],
           ),
         ),
@@ -376,19 +374,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-// ==========================================
-  // SALES VIEW (SUPERCHARGED)
   // ==========================================
-  Widget _buildSalesView(List<Sale> sales) {
+  // SALES VIEW
+  // ==========================================
+  Widget _buildSalesView(List<Sale> sales, bool isDark, Color textColor, Color subTextColor) {
     final fmt = NumberFormat.currency(symbol: '₱');
     
     // --- ADVANCED METRICS ---
     final totalRevenue = sales.fold(0.0, (sum, s) => sum + s.finalTotal);
-    
-    // 1. Discount Leakage
     final totalDiscounts = sales.fold(0.0, (sum, s) => sum + s.discount);
-    
-    // 2. True Profit (Assuming 70% COGS for this simulation, replace with exact batch cost later)
     final totalCOGS = sales.fold(0.0, (sum, s) => sum + (s.finalTotal * 0.70)); 
     final trueProfit = totalRevenue - totalCOGS;
 
@@ -419,10 +413,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
               return Padding(
                 padding: const EdgeInsets.only(right: 8.0),
                 child: ChoiceChip(
-                  label: Text(range, style: TextStyle(color: isSelected ? Colors.white : Colors.grey[800])),
+                  label: Text(range, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.grey[300] : Colors.grey[800]))),
                   selected: isSelected,
-                  selectedColor: Colors.blue[600],
-                  backgroundColor: Colors.white,
+                  selectedColor: isDark ? Colors.blue[700] : Colors.blue[600],
+                  backgroundColor: isDark ? Colors.grey[800] : Colors.white,
+                  side: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
                   onSelected: (_) => setState(() => _dateRange = range),
                 ),
               );
@@ -434,13 +429,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
         // --- ENHANCED KPIs ---
         Row(
           children: [
-            _buildKPI('Total Revenue', fmt.format(totalRevenue), Colors.green),
+            _buildKPI('Total Revenue', fmt.format(totalRevenue), Colors.green, isDark),
             const SizedBox(width: 16),
-            _buildKPI('True Profit (Net)', fmt.format(trueProfit), Colors.purple),
+            _buildKPI('True Profit (Net)', fmt.format(trueProfit), Colors.purple, isDark),
             const SizedBox(width: 16),
-            _buildKPI('Discount Leakage', '-${fmt.format(totalDiscounts)}', Colors.red),
+            _buildKPI('Discount Leakage', '-${fmt.format(totalDiscounts)}', Colors.red, isDark),
             const SizedBox(width: 16),
-            _buildKPI('Target Status', targetHit ? 'Goal Hit! 🎉' : 'Behind Pace', targetHit ? Colors.green : Colors.orange),
+            _buildKPI('Target Status', targetHit ? 'Goal Hit! 🎉' : 'Behind Pace', targetHit ? Colors.green : Colors.orange, isDark),
           ],
         ),
         const SizedBox(height: 24),
@@ -454,13 +449,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Container(
                 height: 350,
                 padding: const EdgeInsets.all(20),
-                decoration: _cardDecoration(),
+                decoration: _cardDecoration(isDark),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Revenue Over Time', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Revenue Over Time', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                     const SizedBox(height: 20),
-                    Expanded(child: _buildSalesLineChart(sales)),
+                    Expanded(child: _buildSalesLineChart(sales, isDark)),
                   ],
                 ),
               ),
@@ -471,19 +466,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Container(
                 height: 350,
                 padding: const EdgeInsets.all(20),
-                decoration: _cardDecoration(),
+                decoration: _cardDecoration(isDark),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.emoji_events, color: Colors.amber),
-                        SizedBox(width: 8),
-                        Text('Cashier Leaderboard', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Icon(Icons.emoji_events, color: Colors.amber),
+                        const SizedBox(width: 8),
+                        Text('Cashier Leaderboard', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Expanded(child: _buildCashierLeaderboard(sales)),
+                    Expanded(child: _buildCashierLeaderboard(sales, isDark, textColor)),
                   ],
                 ),
               ),
@@ -501,14 +496,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Container(
                 height: 320,
                 padding: const EdgeInsets.all(20),
-                decoration: _cardDecoration(),
+                decoration: _cardDecoration(isDark),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Peak Hours Traffic', style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text('Transactions by hour of day', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    Text('Peak Hours Traffic', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+                    Text('Transactions by hour of day', style: TextStyle(color: subTextColor, fontSize: 12)),
                     const SizedBox(height: 24),
-                    Expanded(child: _buildPeakHoursChart(sales)),
+                    Expanded(child: _buildPeakHoursChart(sales, isDark)),
                   ],
                 ),
               ),
@@ -519,22 +514,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Container(
                 height: 320,
                 padding: const EdgeInsets.all(20),
-                decoration: _cardDecoration(),
+                decoration: _cardDecoration(isDark),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Payment mix', style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text(_dateRange, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    Text('Payment mix', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+                    Text(_dateRange, style: TextStyle(color: subTextColor, fontSize: 12)),
                     const SizedBox(height: 24),
-                    Expanded(child: _buildPaymentMixChart(paymentMix)),
+                    Expanded(child: _buildPaymentMixChart(paymentMix, isDark)),
                     const SizedBox(height: 16),
-                    const Divider(),
+                    Divider(color: isDark ? Colors.grey[800] : Colors.grey[200]),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Total received', style: TextStyle(color: Colors.grey[600])),
-                        Text(fmt.format(totalRevenue), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text('Total received', style: TextStyle(color: subTextColor)),
+                        Text(fmt.format(totalRevenue), style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                       ],
                     ),
                   ],
@@ -548,12 +543,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
         // --- ROW 3: SALES GOAL ---
         Container(
           padding: const EdgeInsets.all(20),
-          decoration: _cardDecoration(),
+          decoration: _cardDecoration(isDark),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Sales Goal Progress', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text(_dateRange, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+              Text('Sales Goal Progress', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+              Text(_dateRange, style: TextStyle(color: subTextColor, fontSize: 12)),
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -562,12 +557,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        CircularProgressIndicator(value: progress, strokeWidth: 10, backgroundColor: Colors.grey[100], color: Colors.blue[600]),
+                        CircularProgressIndicator(value: progress, strokeWidth: 10, backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100], color: isDark ? Colors.blue[400] : Colors.blue[600]),
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('${(progress * 100).toStringAsFixed(0)}%', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-                            Text('of goal', style: TextStyle(color: Colors.grey[500], fontSize: 10)),
+                            Text('${(progress * 100).toStringAsFixed(0)}%', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: textColor)),
+                            Text('of goal', style: TextStyle(color: subTextColor, fontSize: 10)),
                           ],
                         )
                       ],
@@ -581,22 +576,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('ACHIEVED', style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.bold)),
-                            Text(fmt.format(totalRevenue), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                            Text('ACHIEVED', style: TextStyle(color: subTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text(fmt.format(totalRevenue), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: textColor)),
                           ],
                         ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('TARGET', style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.bold)),
-                            Text(fmt.format(targetGoal), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.grey)),
+                            Text('TARGET', style: TextStyle(color: subTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text(fmt.format(targetGoal), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: isDark ? Colors.grey[500] : Colors.grey)),
                           ],
                         ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('REMAINING', style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.bold)),
-                            Text(remaining > 0 ? fmt.format(remaining) : '₱0.00', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: remaining > 0 ? Colors.orange[700] : Colors.green)),
+                            Text('REMAINING', style: TextStyle(color: subTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text(remaining > 0 ? fmt.format(remaining) : '₱0.00', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: remaining > 0 ? (isDark ? Colors.orange[400] : Colors.orange[700]) : (isDark ? Colors.green[400] : Colors.green))),
                           ],
                         ),
                       ],
@@ -611,29 +606,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
- // ==========================================
-  // INVENTORY VIEW (SUPERCHARGED & FIXED)
   // ==========================================
-  Widget _buildInventoryView(List<Product> products, List<Sale> filteredSales, List<Sale> allSales) {
+  // INVENTORY VIEW
+  // ==========================================
+  Widget _buildInventoryView(List<Product> products, List<Sale> filteredSales, List<Sale> allSales, bool isDark, Color textColor, Color subTextColor) {
     final fmt = NumberFormat.currency(symbol: '₱');
     
     // --- ADVANCED METRICS ---
     final totalValue = products.fold(0.0, (sum, p) => sum + (p.price * p.stock));
-    
-    // 1. Spoilage Loss
     final expiredProducts = products.where((p) => p.status == 'Expired').toList();
     final spoilageValue = expiredProducts.fold(0.0, (sum, p) => sum + (p.price * p.stock));
 
-    // 2. FIXED Dead Stock Radar (Strictly checks for 0 sales in the last 30 days)
     final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
     final last30DaysSales = allSales.where((s) => DateTime.parse(s.timestamp).isAfter(thirtyDaysAgo)).toList();
-    // Using productId instead of name for perfect accuracy
     final soldProductIds = last30DaysSales.expand((s) => s.items.map((i) => i.productId)).toSet();
     
     final deadStock = products.where((p) => p.stock > 0 && !soldProductIds.contains(p.id)).toList();
-    deadStock.sort((a, b) => (b.price * b.stock).compareTo(a.price * a.stock)); // Sort by most expensive dead stock
+    deadStock.sort((a, b) => (b.price * b.stock).compareTo(a.price * a.stock)); 
 
-    // 3. Restock Plan (PO Generator)
     final lowStock = products.where((p) => p.stock > 0 && p.stock <= p.reorderLevel).toList();
     final outOfStock = products.where((p) => p.stock == 0).toList();
     final itemsToOrder = [...outOfStock, ...lowStock];
@@ -645,7 +635,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       totalRestockCost += suggestedOrder * (p.price * 0.60);
     }
 
-    // 4. RESTORED Top Items Calculation (Respects the selected Date Range filter)
     final itemQtys = <String, int>{};
     final itemRevs = <String, double>{};
     for (var s in filteredSales) {
@@ -669,10 +658,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
               return Padding(
                 padding: const EdgeInsets.only(right: 8.0),
                 child: ChoiceChip(
-                  label: Text(range, style: TextStyle(color: isSelected ? Colors.white : Colors.grey[800])),
+                  label: Text(range, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.grey[300] : Colors.grey[800]))),
                   selected: isSelected,
-                  selectedColor: Colors.blue[600],
-                  backgroundColor: Colors.white,
+                  selectedColor: isDark ? Colors.blue[700] : Colors.blue[600],
+                  backgroundColor: isDark ? Colors.grey[800] : Colors.white,
+                  side: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
                   onSelected: (_) => setState(() => _dateRange = range),
                 ),
               );
@@ -684,13 +674,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
         // --- ENHANCED KPIs ---
         Row(
           children: [
-            _buildKPI('Total Stock Value', fmt.format(totalValue), Colors.green),
+            _buildKPI('Total Stock Value', fmt.format(totalValue), Colors.green, isDark),
             const SizedBox(width: 16),
-            _buildKPI('Spoilage Loss (Expired)', fmt.format(spoilageValue), Colors.red),
+            _buildKPI('Spoilage Loss (Expired)', fmt.format(spoilageValue), Colors.red, isDark),
             const SizedBox(width: 16),
-            _buildKPI('Dead Stock Items', '${deadStock.length} items', Colors.purple),
+            _buildKPI('Dead Stock Items', '${deadStock.length} items', Colors.purple, isDark),
             const SizedBox(width: 16),
-            _buildKPI('Est. Restock Cost', fmt.format(totalRestockCost), Colors.orange),
+            _buildKPI('Est. Restock Cost', fmt.format(totalRestockCost), Colors.orange, isDark),
           ],
         ),
         const SizedBox(height: 24),
@@ -699,21 +689,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. RESTORED Top Items
+            // 1. Top Items
             Expanded(
               flex: 4,
               child: Container(
                 height: 360,
                 padding: const EdgeInsets.all(20),
-                decoration: _cardDecoration(),
+                decoration: _cardDecoration(isDark),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Top items', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text('By units sold ($_dateRange)', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    Text('Top items', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+                    Text('By units sold ($_dateRange)', style: TextStyle(color: subTextColor, fontSize: 12)),
                     const SizedBox(height: 16),
-                    const Divider(),
-                    if (topItems.isEmpty) const Padding(padding: EdgeInsets.all(16.0), child: Text('No items sold in this range.')),
+                    Divider(color: isDark ? Colors.grey[800] : Colors.grey[200]),
+                    if (topItems.isEmpty) Padding(padding: const EdgeInsets.all(16.0), child: Text('No items sold in this range.', style: TextStyle(color: textColor))),
                     Expanded(
                       child: ListView.builder(
                         itemCount: topItems.length,
@@ -730,10 +720,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               children: [
                                 Row(
                                   children: [
-                                    Text('${index + 1}', style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.bold)),
+                                    Text('${index + 1}', style: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[400], fontWeight: FontWeight.bold)),
                                     const SizedBox(width: 12),
-                                    Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-                                    Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    Expanded(child: Text(name, style: TextStyle(fontWeight: FontWeight.w600, color: textColor), overflow: TextOverflow.ellipsis)),
+                                    Text('$qty', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                                   ],
                                 ),
                                 const SizedBox(height: 6),
@@ -743,12 +733,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                     Expanded(
                                       child: LinearProgressIndicator(
                                         value: progress, minHeight: 6,
-                                        backgroundColor: Colors.grey[100], color: Colors.blue[600],
+                                        backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100], color: isDark ? Colors.blue[400] : Colors.blue[600],
                                         borderRadius: BorderRadius.circular(4),
                                       )
                                     ),
                                     const SizedBox(width: 12),
-                                    Text(fmt.format(rev), style: TextStyle(color: Colors.grey[500], fontSize: 11)),
+                                    Text(fmt.format(rev), style: TextStyle(color: subTextColor, fontSize: 11)),
                                   ],
                                 )
                               ],
@@ -769,13 +759,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Container(
                 height: 360,
                 padding: const EdgeInsets.all(20),
-                decoration: _cardDecoration(),
+                decoration: _cardDecoration(isDark),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Stock Status Distribution', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Stock Status Distribution', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                     const SizedBox(height: 24),
-                    Expanded(child: _buildDetailedInventoryPieChart(products)),
+                    Expanded(child: _buildDetailedInventoryPieChart(products, isDark)),
                   ],
                 ),
               ),
@@ -788,20 +778,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Container(
                 height: 360,
                 padding: const EdgeInsets.all(20),
-                decoration: _cardDecoration(),
+                decoration: _cardDecoration(isDark),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.radar, color: Colors.purple[600]),
+                        Icon(Icons.radar, color: isDark ? Colors.purple[400] : Colors.purple[600]),
                         const SizedBox(width: 8),
-                        const Text('Dead Stock Radar', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text('Dead Stock Radar', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                       ],
                     ),
-                    Text('0 sales in the last 30 days', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    Text('0 sales in the last 30 days', style: TextStyle(color: subTextColor, fontSize: 12)),
                     const SizedBox(height: 16),
-                    Expanded(child: _buildDeadStockRadar(deadStock)),
+                    Expanded(child: _buildDeadStockRadar(deadStock, isDark, textColor)),
                   ],
                 ),
               ),
@@ -820,13 +810,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Container(
                 height: 350,
                 padding: const EdgeInsets.all(20),
-                decoration: _cardDecoration(),
+                decoration: _cardDecoration(isDark),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Value Locked by Category', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Value Locked by Category', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                     const SizedBox(height: 24),
-                    Expanded(child: _buildDetailedCategoryBarChart(products)),
+                    Expanded(child: _buildDetailedCategoryBarChart(products, isDark)),
                   ],
                 ),
               ),
@@ -839,7 +829,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Container(
                 height: 350,
                 padding: const EdgeInsets.all(20),
-                decoration: _cardDecoration(),
+                decoration: _cardDecoration(isDark),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -848,9 +838,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.request_quote, color: Colors.orange[700]),
+                            Icon(Icons.request_quote, color: isDark ? Colors.orange[400] : Colors.orange[700]),
                             const SizedBox(width: 8),
-                            const Text('Restock Plan (PO)', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text('Restock Plan (PO)', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                           ],
                         ),
                         TextButton.icon(
@@ -860,9 +850,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         )
                       ],
                     ),
-                    Text('${itemsToOrder.length} items require reordering', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    Text('${itemsToOrder.length} items require reordering', style: TextStyle(color: subTextColor, fontSize: 12)),
                     const SizedBox(height: 16),
-                    Expanded(child: _buildRestockPlan(itemsToOrder)),
+                    Expanded(child: _buildRestockPlan(itemsToOrder, isDark, textColor)),
                   ],
                 ),
               ),
@@ -875,29 +865,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   // --- UI HELPERS & CHARTS ---
 
-  BoxDecoration _cardDecoration() => BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey[200]!));
+  BoxDecoration _cardDecoration(bool isDark) => BoxDecoration(
+    color: isDark ? const Color(0xFF1E1E1E) : Colors.white, 
+    borderRadius: BorderRadius.circular(12), 
+    border: Border.all(color: isDark ? Colors.grey[800]! : Colors.grey[200]!)
+  );
 
-  Widget _buildKPI(String title, String value, MaterialColor color) {
+  Widget _buildKPI(String title, String value, MaterialColor color, bool isDark) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(20),
-        decoration: _cardDecoration(),
+        decoration: _cardDecoration(isDark),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: TextStyle(color: Colors.grey[500], fontSize: 13, fontWeight: FontWeight.bold)),
+            Text(title, style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[500], fontSize: 13, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
-            Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color[700])),
+            Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isDark ? color[400] : color[700])),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSalesLineChart(List<Sale> sales) {
-    if (sales.isEmpty) return const Center(child: Text('No data for selected range.'));
+  Widget _buildSalesLineChart(List<Sale> sales, bool isDark) {
+    if (sales.isEmpty) return Center(child: Text('No data for selected range.', style: TextStyle(color: isDark ? Colors.white : Colors.black)));
     
-    // Group sales by day
     final grouped = <int, double>{};
     for (var s in sales) {
       final day = DateTime.parse(s.timestamp).day;
@@ -909,83 +902,73 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     return LineChart(
       LineChartData(
-        gridData: const FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 5000),
-        titlesData: const FlTitlesData(topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false))),
+        gridData: FlGridData(
+          show: true, 
+          drawVerticalLine: false, 
+          horizontalInterval: 5000,
+          getDrawingHorizontalLine: (value) => FlLine(color: isDark ? Colors.grey[800]! : Colors.grey[200]!, strokeWidth: 1),
+        ),
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)), 
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 45,
+              getTitlesWidget: (value, meta) {
+                if (value == 0) return const SizedBox.shrink();
+                String text = value >= 1000 ? '${(value / 1000).toStringAsFixed(1)}k' : value.toStringAsFixed(0);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Text(text, style: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[600], fontSize: 11), textAlign: TextAlign.right),
+                );
+              }
+            )
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 30,
+              getTitlesWidget: (value, meta) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(value.toInt().toString(), style: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[600], fontSize: 11)),
+                );
+              }
+            )
+          )
+        ),
         borderData: FlBorderData(show: false),
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (group) => isDark ? Colors.blueGrey[800]! : Colors.blueGrey[700]!,
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) => LineTooltipItem(
+                'Day ${spot.x.toInt()}\n₱${spot.y.toStringAsFixed(0)}',
+                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)
+              )).toList();
+            }
+          )
+        ),
         lineBarsData: [
-          LineChartBarData(spots: spots, isCurved: true, color: Colors.blue[600], barWidth: 3, belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.1))),
+          LineChartBarData(
+            spots: spots, 
+            isCurved: true, 
+            color: isDark ? Colors.blue[400] : Colors.blue[600], 
+            barWidth: 3, 
+            belowBarData: BarAreaData(show: true, color: (isDark ? Colors.blue[400]! : Colors.blue[600]!).withOpacity(0.1))
+          ),
         ],
       ),
     );
   }
 
-//   Widget _buildInventoryPieChart(List<Product> products) {
-//     if (products.isEmpty) return const SizedBox();
-//     final outOfStock = products.where((p) => p.stock == 0).length;
-//     final lowStock = products.where((p) => p.stock > 0 && p.stock <= p.reorderLevel).length;
-//     final normal = products.length - outOfStock - lowStock;
-
-//     return PieChart(
-//       PieChartData(
-//         sectionsSpace: 2, centerSpaceRadius: 40,
-//         sections: [
-//           PieChartSectionData(color: Colors.green, value: normal.toDouble(), title: 'Normal', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white)),
-//           PieChartSectionData(color: Colors.orange, value: lowStock.toDouble(), title: 'Low', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white)),
-//           PieChartSectionData(color: Colors.red, value: outOfStock.toDouble(), title: 'Out', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white)),
-//         ]
-//       )
-//     );
-//   }
-
-//   Widget _buildCategoryBarChart(List<Product> products) {
-//     if (products.isEmpty) return const SizedBox();
+  Widget _buildPaymentMixChart(Map<String, double> paymentMix, bool isDark) {
+    if (paymentMix.isEmpty) return Center(child: Text('No payments recorded.', style: TextStyle(color: isDark ? Colors.white : Colors.black)));
     
-//     final catValue = <String, double>{};
-//     for (var p in products) {
-//       catValue[p.category] = (catValue[p.category] ?? 0) + (p.stock * p.price);
-//     }
-    
-//     final sortedCats = catValue.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-//     final topCats = sortedCats.take(5).toList();
-
-//     return BarChart(
-//       BarChartData(
-//         gridData: const FlGridData(show: false),
-//         titlesData: FlTitlesData(
-//           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-//           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-//           bottomTitles: AxisTitles(
-//             sideTitles: SideTitles(
-//               showTitles: true,
-//               getTitlesWidget: (value, meta) {
-//                 if (value.toInt() >= 0 && value.toInt() < topCats.length) {
-//                   return Padding(
-//                     padding: const EdgeInsets.only(top: 8.0),
-//                     child: Text(topCats[value.toInt()].key, style: const TextStyle(fontSize: 10), overflow: TextOverflow.ellipsis),
-//                   );
-//                 }
-//                 return const Text('');
-//               }
-//             )
-//           )
-//         ),
-//         borderData: FlBorderData(show: false),
-//         barGroups: topCats.asMap().entries.map((e) {
-//           return BarChartGroupData(
-//             x: e.key,
-//             barRods: [BarChartRodData(toY: e.value.value, color: Colors.blue[600], width: 24, borderRadius: const BorderRadius.vertical(top: Radius.circular(4)))],
-//           );
-//         }).toList(),
-//       )
-//     );
-//   }
-// }
-
-// --- ADD THIS HELPER ---
-  Widget _buildPaymentMixChart(Map<String, double> paymentMix) {
-    if (paymentMix.isEmpty) return const Center(child: Text('No payments recorded.'));
-    
-    final colors = [Colors.green, Colors.orange, Colors.blue, Colors.purple];
+    final colors = isDark 
+      ? [Colors.green[400]!, Colors.orange[400]!, Colors.blue[400]!, Colors.purple[400]!]
+      : [Colors.green, Colors.orange, Colors.blue, Colors.purple];
     final sections = paymentMix.entries.toList();
 
     return Row(
@@ -1014,7 +997,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               children: [
                 Icon(Icons.circle, size: 10, color: colors[e.key % colors.length]),
                 const SizedBox(width: 8),
-                Text(e.value.key, style: TextStyle(color: Colors.grey[700], fontSize: 12)),
+                Text(e.value.key, style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[700], fontSize: 12)),
               ],
             );
           }).toList(),
@@ -1023,8 +1006,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  // --- REPLACE THIS HELPER ---
-  Widget _buildDetailedInventoryPieChart(List<Product> products) {
+  Widget _buildDetailedInventoryPieChart(List<Product> products, bool isDark) {
     if (products.isEmpty) return const SizedBox();
     final outOfStock = products.where((p) => p.stock == 0).length;
     final lowStock = products.where((p) => p.stock > 0 && p.stock <= p.reorderLevel).length;
@@ -1038,10 +1020,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
             PieChartData(
               sectionsSpace: 2, centerSpaceRadius: 50,
               sections: [
-                PieChartSectionData(color: Colors.green[400], value: normal.toDouble(), title: '${((normal/total)*100).toStringAsFixed(0)}%', radius: 30, titleStyle: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
-                PieChartSectionData(color: Colors.orange[400], value: lowStock.toDouble(), title: '${((lowStock/total)*100).toStringAsFixed(0)}%', radius: 30, titleStyle: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+                PieChartSectionData(color: isDark ? Colors.green[400] : Colors.green[500], value: normal.toDouble(), title: '${((normal/total)*100).toStringAsFixed(0)}%', radius: 30, titleStyle: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+                PieChartSectionData(color: isDark ? Colors.orange[400] : Colors.orange[500], value: lowStock.toDouble(), title: '${((lowStock/total)*100).toStringAsFixed(0)}%', radius: 30, titleStyle: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
                 if (outOfStock > 0)
-                  PieChartSectionData(color: Colors.red[400], value: outOfStock.toDouble(), title: '${((outOfStock/total)*100).toStringAsFixed(0)}%', radius: 30, titleStyle: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+                  PieChartSectionData(color: isDark ? Colors.red[400] : Colors.red[500], value: outOfStock.toDouble(), title: '${((outOfStock/total)*100).toStringAsFixed(0)}%', radius: 30, titleStyle: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
               ]
             )
           )
@@ -1051,19 +1033,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [Icon(Icons.circle, size: 10, color: Colors.green[400]), const SizedBox(width: 8), Text('Normal ($normal)', style: const TextStyle(fontSize: 12))]),
+            Row(children: [Icon(Icons.circle, size: 10, color: isDark ? Colors.green[400] : Colors.green[500]), const SizedBox(width: 8), Text('Normal ($normal)', style: TextStyle(fontSize: 12, color: isDark ? Colors.white : Colors.black))]),
             const SizedBox(height: 8),
-            Row(children: [Icon(Icons.circle, size: 10, color: Colors.orange[400]), const SizedBox(width: 8), Text('Low Stock ($lowStock)', style: const TextStyle(fontSize: 12))]),
+            Row(children: [Icon(Icons.circle, size: 10, color: isDark ? Colors.orange[400] : Colors.orange[500]), const SizedBox(width: 8), Text('Low Stock ($lowStock)', style: TextStyle(fontSize: 12, color: isDark ? Colors.white : Colors.black))]),
             const SizedBox(height: 8),
-            Row(children: [Icon(Icons.circle, size: 10, color: Colors.red[400]), const SizedBox(width: 8), Text('Critical ($outOfStock)', style: const TextStyle(fontSize: 12))]),
+            Row(children: [Icon(Icons.circle, size: 10, color: isDark ? Colors.red[400] : Colors.red[500]), const SizedBox(width: 8), Text('Critical ($outOfStock)', style: TextStyle(fontSize: 12, color: isDark ? Colors.white : Colors.black))]),
           ],
         )
       ],
     );
   }
 
-  // --- REPLACE THIS HELPER ---
-  Widget _buildDetailedCategoryBarChart(List<Product> products) {
+  Widget _buildDetailedCategoryBarChart(List<Product> products, bool isDark) {
     if (products.isEmpty) return const SizedBox();
     
     final catValue = <String, double>{};
@@ -1074,24 +1055,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final sortedCats = catValue.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     final topCats = sortedCats.take(6).toList(); 
     
-    // FIX 1: Increased from 1.2 to 1.3 (30% headroom) so the tooltips never hit the ceiling
     final maxY = topCats.isEmpty ? 100.0 : topCats.first.value * 1.3; 
 
     return BarChart(
       BarChartData(
         alignment: BarChartAlignment.spaceAround,
         maxY: maxY,
-        gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: (maxY / 4).ceilToDouble()),
+        gridData: FlGridData(
+          show: true, 
+          drawVerticalLine: false, 
+          horizontalInterval: (maxY / 4).ceilToDouble(),
+          getDrawingHorizontalLine: (value) => FlLine(color: isDark ? Colors.grey[800]! : Colors.grey[200]!, strokeWidth: 1),
+        ),
         
-        // FIX 2: Stylized the Tooltip to be cleaner
         barTouchData: BarTouchData(
-          enabled: false, // False because we force them to always show via showingTooltipIndicators
+          enabled: false, 
           touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (group) => Colors.blueGrey[700]!, // Background color of the tooltip
+            getTooltipColor: (group) => isDark ? Colors.blueGrey[800]! : Colors.blueGrey[700]!,
             tooltipMargin: 8,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               return BarTooltipItem(
-                rod.toY.toStringAsFixed(0), // Clean whole numbers
+                rod.toY.toStringAsFixed(0),
                 const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
               );
             },
@@ -1102,22 +1086,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           
-          // FIX 3: Explicitly sizing and formatting the Left Y-Axis
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 50, // Added much more breathing room so text doesn't overlap
+              reservedSize: 50, 
               getTitlesWidget: (value, meta) {
                 if (value == 0) return const SizedBox.shrink();
-                
-                // Formats numbers cleanly (e.g., 12500 -> "12.5k")
-                String text = value >= 1000 
-                    ? '${(value / 1000).toStringAsFixed(1)}k' 
-                    : value.toStringAsFixed(0);
-                    
+                String text = value >= 1000 ? '${(value / 1000).toStringAsFixed(1)}k' : value.toStringAsFixed(0);
                 return Padding(
                   padding: const EdgeInsets.only(right: 8.0),
-                  child: Text(text, style: TextStyle(color: Colors.grey[600], fontSize: 11), textAlign: TextAlign.right),
+                  child: Text(text, style: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[600], fontSize: 11), textAlign: TextAlign.right),
                 );
               }
             )
@@ -1131,7 +1109,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 if (value.toInt() >= 0 && value.toInt() < topCats.length) {
                   return Padding(
                     padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(topCats[value.toInt()].key, style: TextStyle(fontSize: 11, color: Colors.grey[700]), overflow: TextOverflow.ellipsis),
+                    child: Text(topCats[value.toInt()].key, style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[700]), overflow: TextOverflow.ellipsis),
                   );
                 }
                 return const SizedBox.shrink();
@@ -1146,24 +1124,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
             barRods: [
               BarChartRodData(
                 toY: e.value.value, 
-                color: Colors.blue[500], 
+                color: isDark ? Colors.blue[400] : Colors.blue[500], 
                 width: 32, 
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(6))
               )
             ],
-            showingTooltipIndicators: [0], // Forces value label to always show on top
+            showingTooltipIndicators: [0], 
           );
         }).toList(),
       )
     );
   }
 
-  // --- NEW: Cashier Leaderboard ---
-  Widget _buildCashierLeaderboard(List<Sale> sales) {
-    if (sales.isEmpty) return const Center(child: Text('No sales data.'));
+  Widget _buildCashierLeaderboard(List<Sale> sales, bool isDark, Color textColor) {
+    if (sales.isEmpty) return Center(child: Text('No sales data.', style: TextStyle(color: textColor)));
     final fmt = NumberFormat.currency(symbol: '₱');
     
-    // Aggregate sales by cashier
     final cashierStats = <String, Map<String, dynamic>>{};
     for (var s in sales) {
       if (!cashierStats.containsKey(s.cashierName)) {
@@ -1177,29 +1153,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     return ListView.separated(
       itemCount: sortedCashiers.length,
-      separatorBuilder: (_, __) => const Divider(),
+      separatorBuilder: (_, __) => Divider(color: isDark ? Colors.grey[800] : Colors.grey[200]),
       itemBuilder: (context, index) {
         final entry = sortedCashiers[index];
         final isTop = index == 0;
         return ListTile(
           contentPadding: EdgeInsets.zero,
           leading: CircleAvatar(
-            backgroundColor: isTop ? Colors.amber[100] : Colors.blue[50],
-            child: Text('${index + 1}', style: TextStyle(color: isTop ? Colors.amber[900] : Colors.blue[900], fontWeight: FontWeight.bold)),
+            backgroundColor: isTop ? (isDark ? Colors.amber[900]!.withOpacity(0.3) : Colors.amber[100]) : (isDark ? Colors.blue[900]!.withOpacity(0.3) : Colors.blue[50]),
+            child: Text('${index + 1}', style: TextStyle(color: isTop ? (isDark ? Colors.amber[400] : Colors.amber[900]) : (isDark ? Colors.blue[300] : Colors.blue[900]), fontWeight: FontWeight.bold)),
           ),
-          title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text('${entry.value['txns']} transactions', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-          trailing: Text(fmt.format(entry.value['revenue']), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+          title: Text(entry.key, style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+          subtitle: Text('${entry.value['txns']} transactions', style: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[600], fontSize: 12)),
+          trailing: Text(fmt.format(entry.value['revenue']), style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.green[400] : Colors.green)),
         );
       },
     );
   }
 
-  // --- NEW: Peak Hours Heatmap / Bar Chart ---
-  Widget _buildPeakHoursChart(List<Sale> sales) {
-    if (sales.isEmpty) return const Center(child: Text('No sales data.'));
+  Widget _buildPeakHoursChart(List<Sale> sales, bool isDark) {
+    if (sales.isEmpty) return Center(child: Text('No sales data.', style: TextStyle(color: isDark ? Colors.white : Colors.black)));
 
-    // Count transactions per hour (0 to 23)
     final hourlyCounts = List.filled(24, 0);
     for (var s in sales) {
       final hour = DateTime.parse(s.timestamp).hour;
@@ -1212,23 +1186,53 @@ class _ReportsScreenState extends State<ReportsScreen> {
       BarChartData(
         alignment: BarChartAlignment.spaceAround,
         maxY: maxCount == 0 ? 10 : maxCount + 2,
-        gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: (maxCount / 4) == 0 ? 1 : maxCount / 4),
+        gridData: FlGridData(
+          show: true, 
+          drawVerticalLine: false, 
+          horizontalInterval: (maxCount / 4) == 0 ? 1 : maxCount / 4,
+          getDrawingHorizontalLine: (value) => FlLine(color: isDark ? Colors.grey[800]! : Colors.grey[200]!, strokeWidth: 1),
+        ),
         borderData: FlBorderData(show: false),
+        
+        barTouchData: BarTouchData(
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (group) => isDark ? Colors.blueGrey[800]! : Colors.blueGrey[700]!,
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              return BarTooltipItem(
+                '${rod.toY.toInt()} txns',
+                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)
+              );
+            }
+          )
+        ),
+        
         titlesData: FlTitlesData(
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 30,
+              getTitlesWidget: (value, meta) {
+                if (value == 0 || value % 1 != 0) return const SizedBox.shrink(); // Only whole numbers
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Text(value.toInt().toString(), style: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[600], fontSize: 10), textAlign: TextAlign.right),
+                );
+              }
+            )
+          ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) {
                 final hour = value.toInt();
-                // Only show labels every 3 hours to avoid crowding
                 if (hour % 3 == 0) {
                   final ampm = hour >= 12 ? 'PM' : 'AM';
                   final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
                   return Padding(
                     padding: const EdgeInsets.only(top: 8.0),
-                    child: Text('$displayHour$ampm', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                    child: Text('$displayHour$ampm', style: TextStyle(fontSize: 10, color: isDark ? Colors.grey[400] : Colors.grey[600])),
                   );
                 }
                 return const Text('');
@@ -1238,11 +1242,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
         barGroups: List.generate(24, (index) {
           final count = hourlyCounts[index];
-          // Color changes based on volume (heatmap logic)
-          Color barColor = Colors.blue[100]!;
-          if (count > maxCount * 0.75) barColor = Colors.red[400]!; // Very Busy
-          else if (count > maxCount * 0.4) barColor = Colors.orange[400]!; // Busy
-          else if (count > 0) barColor = Colors.blue[400]!; // Normal
+          Color barColor = isDark ? Colors.blue[900]!.withOpacity(0.5) : Colors.blue[100]!;
+          if (count > maxCount * 0.75) {
+            barColor = isDark ? Colors.red[400]! : Colors.red[400]!; 
+          } else if (count > maxCount * 0.4) {
+            barColor = isDark ? Colors.orange[400]! : Colors.orange[400]!; 
+          } else if (count > 0) {
+            barColor = isDark ? Colors.blue[400]! : Colors.blue[400]!; 
+          }
 
           return BarChartGroupData(
             x: index,
@@ -1260,17 +1267,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  // --- NEW: Dead Stock Radar ---
-  Widget _buildDeadStockRadar(List<Product> deadStock) {
+  Widget _buildDeadStockRadar(List<Product> deadStock, bool isDark, Color textColor) {
     if (deadStock.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.check_circle_outline, color: Colors.green[300], size: 48),
+            Icon(Icons.check_circle_outline, color: isDark ? Colors.green[400] : Colors.green[300], size: 48),
             const SizedBox(height: 12),
-            Text('No Dead Stock!', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
-            Text('All inventory is moving perfectly.', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+            Text('No Dead Stock!', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontWeight: FontWeight.bold)),
+            Text('All inventory is moving perfectly.', style: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[500], fontSize: 12)),
           ],
         ),
       );
@@ -1280,20 +1286,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
     
     return ListView.separated(
       itemCount: deadStock.length,
-      separatorBuilder: (_, __) => const Divider(),
+      separatorBuilder: (_, __) => Divider(color: isDark ? Colors.grey[800] : Colors.grey[200]),
       itemBuilder: (context, index) {
         final p = deadStock[index];
         final lockedValue = p.stock * p.price;
         return ListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14), overflow: TextOverflow.ellipsis),
-          subtitle: Text('In Stock: ${p.stock}  •  Category: ${p.category}', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+          title: Text(p.name, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: textColor), overflow: TextOverflow.ellipsis),
+          subtitle: Text('In Stock: ${p.stock}  •  Category: ${p.category}', style: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[600], fontSize: 11)),
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const Text('Value Locked', style: TextStyle(fontSize: 10, color: Colors.red)),
-              Text(fmt.format(lockedValue), style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red[700])),
+              Text('Value Locked', style: TextStyle(fontSize: 10, color: isDark ? Colors.red[300] : Colors.red)),
+              Text(fmt.format(lockedValue), style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.red[400] : Colors.red[700])),
             ],
           ),
         );
@@ -1301,17 +1307,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  // --- NEW: Restock Plan (PO Generator) ---
-  Widget _buildRestockPlan(List<Product> itemsToOrder) {
+  Widget _buildRestockPlan(List<Product> itemsToOrder, bool isDark, Color textColor) {
     if (itemsToOrder.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory, color: Colors.green[300], size: 48),
+            Icon(Icons.inventory, color: isDark ? Colors.green[400] : Colors.green[300], size: 48),
             const SizedBox(height: 12),
-            Text('Inventory is Healthy', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
-            Text('No items need to be ordered.', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+            Text('Inventory is Healthy', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontWeight: FontWeight.bold)),
+            Text('No items need to be ordered.', style: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[500], fontSize: 12)),
           ],
         ),
       );
@@ -1321,28 +1326,28 @@ class _ReportsScreenState extends State<ReportsScreen> {
     
     return ListView.separated(
       itemCount: itemsToOrder.length,
-      separatorBuilder: (_, __) => const Divider(),
+      separatorBuilder: (_, __) => Divider(color: isDark ? Colors.grey[800] : Colors.grey[200]),
       itemBuilder: (context, index) {
         final p = itemsToOrder[index];
         int suggestedOrder = (p.reorderLevel * 2) - p.stock;
         if (suggestedOrder < 20) suggestedOrder = 20; 
-        final estCost = suggestedOrder * (p.price * 0.60); // 60% wholesale est
+        final estCost = suggestedOrder * (p.price * 0.60); 
 
         return ListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14), overflow: TextOverflow.ellipsis),
+          title: Text(p.name, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: textColor), overflow: TextOverflow.ellipsis),
           subtitle: Row(
             children: [
-              Text('Have: ${p.stock}', style: TextStyle(color: p.stock == 0 ? Colors.red : Colors.orange, fontWeight: FontWeight.bold, fontSize: 11)),
-              Text('  •  Need: $suggestedOrder', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+              Text('Have: ${p.stock}', style: TextStyle(color: p.stock == 0 ? (isDark ? Colors.red[400] : Colors.red) : (isDark ? Colors.orange[400] : Colors.orange), fontWeight: FontWeight.bold, fontSize: 11)),
+              Text('  •  Need: $suggestedOrder', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 11)),
             ],
           ),
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const Text('Est. Cost', style: TextStyle(fontSize: 10, color: Colors.grey)),
-              Text(fmt.format(estCost), style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange[800])),
+              Text('Est. Cost', style: TextStyle(fontSize: 10, color: isDark ? Colors.grey[500] : Colors.grey)),
+              Text(fmt.format(estCost), style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.orange[400] : Colors.orange[800])),
             ],
           ),
         );

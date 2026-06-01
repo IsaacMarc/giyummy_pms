@@ -89,8 +89,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
               final expB = _getNextExpiration(b.id, provider);
               
               // Push items with 'No Batch Data' to the bottom of the list
-              if (expA == null && expB == null) cmp = 0;
-              else if (expA == null) cmp = 1; 
+              if (expA == null && expB == null) {
+                cmp = 0;
+              } else if (expA == null) cmp = 1; 
               else if (expB == null) cmp = -1;
               else cmp = expA.compareTo(expB);
 
@@ -166,7 +167,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final products = provider.getProducts();
     final filtered = _filtered(products, provider);
     final categories = _categories(products);
-    final fmt = NumberFormat.currency(symbol: '\₱');
+    final fmt = NumberFormat.currency(symbol: '₱');
 
     // KPI Calculations
     final totalValue = products.fold(0.0, (sum, p) {
@@ -269,7 +270,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           Expanded(
                             flex: 2,
                             child: DropdownButtonFormField<String>(
-                              value: _categoryFilter,
+                              initialValue: _categoryFilter,
                               decoration: InputDecoration(
                                 labelText: 'Filter by Category',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -478,7 +479,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   void _showBatchesDialog(BuildContext ctx, Product product) {
     final isDark = Theme.of(ctx).brightness == Brightness.dark;
     final provider = ctx.read<AppProvider>();
-    final fmt = NumberFormat.currency(symbol: '\₱');
+    final fmt = NumberFormat.currency(symbol: '₱');
     
     showDialog(
       context: ctx,
@@ -851,7 +852,20 @@ trailing: Row(
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Expanded(child: _field(reorderCtrl, 'Reorder Level', isNumber: true, readOnly: isReadOnly)),
+                      // Updated: Wrapped in a Row to fit the calculator button
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Expanded(child: _field(reorderCtrl, 'Reorder Level', isNumber: true, readOnly: isReadOnly)),
+                            if (!isReadOnly)
+                              IconButton(
+                                icon: const Icon(Icons.calculate, color: Colors.blue),
+                                tooltip: 'Smart Reorder Calculator',
+                                onPressed: () => _showReorderPointCalculator(dialogCtx, reorderCtrl),
+                              ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(width: 12),
                       Expanded(child: _field(barcodeCtrl, 'Barcode', readOnly: isReadOnly)),
                     ],
@@ -938,4 +952,73 @@ trailing: Row(
         ),
       );
     }
+    // --- NEW: Enterprise Reorder Point Calculator ---
+  Future<void> _showReorderPointCalculator(BuildContext ctx, TextEditingController targetCtrl) async {
+    final demandCtrl = TextEditingController();
+    final leadTimeCtrl = TextEditingController();
+    final safetyCtrl = TextEditingController();
+    String? err;
+
+    await showDialog(
+      context: ctx,
+      builder: (calcCtx) => StatefulBuilder(
+        builder: (_, setCalcState) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.auto_graph, color: Colors.blue[700]),
+              const SizedBox(width: 12),
+              const Text('Smart Reorder Calculator', style: TextStyle(fontSize: 18)),
+            ],
+          ),
+          content: SizedBox(
+            width: 350,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (err != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(err!, style: const TextStyle(color: Colors.red))),
+                
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8)),
+                  child: const Text('Formula: (Daily Demand × Lead Time) + Safety Stock', style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(height: 16),
+                
+                _field(demandCtrl, 'Avg. Daily Demand (units sold/day)', isNumber: true),
+                const SizedBox(height: 12),
+                _field(leadTimeCtrl, 'Lead Time (days to deliver)', isNumber: true),
+                const SizedBox(height: 12),
+                _field(safetyCtrl, 'Safety Stock (buffer units)', isNumber: true),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(calcCtx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                final demand = double.tryParse(demandCtrl.text) ?? 0;
+                final leadTime = double.tryParse(leadTimeCtrl.text) ?? 0;
+                final safety = double.tryParse(safetyCtrl.text) ?? 0;
+
+                if (demand <= 0 || leadTime <= 0) {
+                  setCalcState(() => err = 'Demand and Lead Time must be greater than 0');
+                  return;
+                }
+
+                // Execute the core supermarket math
+                final double exactReorderPoint = (demand * leadTime) + safety;
+                
+                // Apply to the main text controller (using .ceil() to round up to the nearest whole item)
+                targetCtrl.text = exactReorderPoint.ceil().toString();
+                
+                Navigator.pop(calcCtx);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
+              child: const Text('Calculate & Apply'),
+            )
+          ],
+        ),
+      ),
+    );
+  }
 }

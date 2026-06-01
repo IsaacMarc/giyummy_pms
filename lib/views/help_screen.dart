@@ -90,19 +90,24 @@ ${_messageCtrl.text}
     }
   }
 
-  BoxDecoration _cardDecoration() {
+  BoxDecoration _cardDecoration(bool isDark) {
     return BoxDecoration(
-      color: Colors.white,
+      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.grey[200]!),
-      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))]
+      border: Border.all(color: isDark ? Colors.grey[800]! : Colors.grey[200]!),
+      boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))]
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF121212) : const Color(0xFFF9FAFB);
+    final textColor = isDark ? Colors.white : const Color(0xFF1A1F36);
+    final subTextColor = isDark ? Colors.grey[400]! : Colors.grey[600]!;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB), // Clean modern background
+      backgroundColor: bgColor,
       body: DefaultTabController(
         length: 3,
         child: SafeArea(
@@ -116,16 +121,16 @@ ${_messageCtrl.text}
                   children: [
                     Container(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: Colors.blue[600], borderRadius: BorderRadius.circular(12)),
+                      decoration: BoxDecoration(color: isDark ? Colors.blue[800] : Colors.blue[600], borderRadius: BorderRadius.circular(12)),
                       child: const Icon(Icons.support_agent, size: 32, color: Colors.white),
                     ),
                     const SizedBox(width: 20),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Help & Support Center', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF1A1F36))),
+                        Text('Help & Support Center', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: textColor)),
                         const SizedBox(height: 4),
-                        Text('Find answers, learn the system, or contact our technical team.', style: TextStyle(fontSize: 15, color: Colors.grey[600])),
+                        Text('Find answers, learn the system, or contact our technical team.', style: TextStyle(fontSize: 15, color: subTextColor)),
                       ],
                     ),
                   ],
@@ -136,14 +141,18 @@ ${_messageCtrl.text}
                 Container(
                   height: 50,
                   padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(12)),
+                  decoration: BoxDecoration(color: isDark ? Colors.grey[900] : Colors.grey[200], borderRadius: BorderRadius.circular(12)),
                   child: TabBar(
                     indicatorSize: TabBarIndicatorSize.tab,
                     dividerColor: Colors.transparent,
-                    indicator: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))]),
-                    labelColor: Colors.blue[800],
+                    indicator: BoxDecoration(
+                      color: isDark ? Colors.grey[800] : Colors.white, 
+                      borderRadius: BorderRadius.circular(8), 
+                      boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))]
+                    ),
+                    labelColor: isDark ? Colors.blue[300] : Colors.blue[800],
                     labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                    unselectedLabelColor: Colors.grey[600],
+                    unselectedLabelColor: isDark ? Colors.grey[500] : Colors.grey[600],
                     tabs: const [
                       Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.menu_book, size: 18), SizedBox(width: 8), Text('User Guides')])),
                       Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.question_answer, size: 18), SizedBox(width: 8), Text('FAQ')])),
@@ -157,9 +166,9 @@ ${_messageCtrl.text}
                 Expanded(
                   child: TabBarView(
                     children: [
-                      _buildUserGuidesTab(),
-                      _buildFAQTab(),
-                      _buildContactTab(),
+                      _buildUserGuidesTab(isDark, textColor, subTextColor),
+                      _buildFAQTab(isDark, textColor, subTextColor),
+                      _buildContactTab(isDark, textColor, subTextColor),
                     ],
                   ),
                 ),
@@ -172,7 +181,7 @@ ${_messageCtrl.text}
   }
 
   // --- 1. USER GUIDES TAB (GRID LAYOUT) ---
-  Widget _buildUserGuidesTab() {
+  Widget _buildUserGuidesTab(bool isDark, Color textColor, Color subTextColor) {
     final List<Map<String, dynamic>> guides = [
       {
         'icon': Icons.dashboard, 'title': 'Dashboard Overview',
@@ -254,7 +263,7 @@ ${_messageCtrl.text}
           borderRadius: BorderRadius.circular(16),
           child: Container(
             padding: const EdgeInsets.all(24),
-            decoration: _cardDecoration(),
+            decoration: _cardDecoration(isDark),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -262,17 +271,20 @@ ${_messageCtrl.text}
                   children: [
                     Container(
                       padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8)),
-                      child: Icon(guides[i]['icon'] as IconData, color: Colors.blue[700], size: 24),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.blue[900]!.withOpacity(0.3) : Colors.blue[50], 
+                        borderRadius: BorderRadius.circular(8)
+                      ),
+                      child: Icon(guides[i]['icon'] as IconData, color: isDark ? Colors.blue[400] : Colors.blue[700], size: 24),
                     ),
                     const Spacer(),
-                    Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey[400])
+                    Icon(Icons.arrow_forward_ios, size: 14, color: isDark ? Colors.grey[600] : Colors.grey[400])
                   ],
                 ),
                 const Spacer(),
-                Text(guides[i]['title'] as String, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF1A1F36))),
+                Text(guides[i]['title'] as String, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: textColor)),
                 const SizedBox(height: 8),
-                Text(guides[i]['desc'] as String, style: TextStyle(color: Colors.grey[600], fontSize: 13, height: 1.4), maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(guides[i]['desc'] as String, style: TextStyle(color: subTextColor, fontSize: 13, height: 1.4), maxLines: 2, overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
@@ -282,7 +294,7 @@ ${_messageCtrl.text}
   }
 
   // --- 2. FAQ TAB ---
-  Widget _buildFAQTab() {
+  Widget _buildFAQTab(bool isDark, Color textColor, Color subTextColor) {
     final faqs = [
       {'q': 'Can I use this POS system offline?', 'a': 'Yes! Because the system uses a localized database, all core functions (Sales, Inventory, Alerts) work perfectly without an internet connection. Internet is only required to send Support Tickets.'},
       {'q': 'How do I process a refund or return?', 'a': 'Currently, returns must be handled administratively. An Admin can adjust the inventory stock manually to add the returned item back, and adjust the daily revenue records accordingly.'},
@@ -306,37 +318,41 @@ ${_messageCtrl.text}
         TextField(
           controller: _faqSearchCtrl,
           onChanged: (val) => setState(() => _faqSearchQuery = val.toLowerCase()),
+          style: TextStyle(color: textColor),
           decoration: InputDecoration(
             hintText: 'Search frequently asked questions...',
-            prefixIcon: const Icon(Icons.search, color: Colors.blue),
-            suffixIcon: _faqSearchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _faqSearchCtrl.clear(); setState(() => _faqSearchQuery = ''); }) : null,
+            hintStyle: TextStyle(color: subTextColor),
+            prefixIcon: Icon(Icons.search, color: isDark ? Colors.blue[400] : Colors.blue),
+            suffixIcon: _faqSearchQuery.isNotEmpty ? IconButton(icon: Icon(Icons.clear, color: subTextColor), onPressed: () { _faqSearchCtrl.clear(); setState(() => _faqSearchQuery = ''); }) : null,
             filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+            fillColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? Colors.grey[800]! : Colors.grey[300]!)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? Colors.grey[800]! : Colors.grey[300]!)),
           ),
         ),
         const SizedBox(height: 24),
         Expanded(
           child: filteredFaqs.isEmpty
-              ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.search_off, size: 48, color: Colors.grey[400]), const SizedBox(height: 16), Text('No FAQs match your search.', style: TextStyle(color: Colors.grey[600], fontSize: 16))]))
+              ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.search_off, size: 48, color: isDark ? Colors.grey[800] : Colors.grey[400]), const SizedBox(height: 16), Text('No FAQs match your search.', style: TextStyle(color: subTextColor, fontSize: 16))]))
               : ListView.builder(
                   itemCount: filteredFaqs.length,
                   itemBuilder: (ctx, i) {
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
-                      decoration: _cardDecoration(),
+                      decoration: _cardDecoration(isDark),
                       child: ExpansionTile(
                         shape: const Border(), // Remove default borders
-                        iconColor: Colors.blue[700],
-                        textColor: Colors.blue[900],
+                        iconColor: isDark ? Colors.blue[300] : Colors.blue[700],
+                        textColor: isDark ? Colors.blue[300] : Colors.blue[900],
+                        collapsedIconColor: subTextColor,
+                        collapsedTextColor: textColor,
                         title: Text(filteredFaqs[i]['q']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                         children: [
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                             child: Align(
                               alignment: Alignment.centerLeft,
-                              child: Text(filteredFaqs[i]['a']!, style: TextStyle(color: Colors.grey[700], height: 1.5, fontSize: 14)),
+                              child: Text(filteredFaqs[i]['a']!, style: TextStyle(color: subTextColor, height: 1.5, fontSize: 14)),
                             ),
                           )
                         ],
@@ -350,7 +366,7 @@ ${_messageCtrl.text}
   }
 
   // --- 3. CONTACT SUPPORT TAB ---
-  Widget _buildContactTab() {
+  Widget _buildContactTab(bool isDark, Color textColor, Color subTextColor) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -359,15 +375,15 @@ ${_messageCtrl.text}
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Get in Touch', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text('Get in Touch', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)),
               const SizedBox(height: 8),
-              Text('Our technical support team is available during standard business hours to assist you with any system errors or inquiries.', style: TextStyle(color: Colors.grey[600], height: 1.5)),
+              Text('Our technical support team is available during standard business hours to assist you with any system errors or inquiries.', style: TextStyle(color: subTextColor, height: 1.5)),
               const SizedBox(height: 40),
-              _contactInfoRow(Icons.email_outlined, 'Email Support', 'support@pms-system.com'),
+              _contactInfoRow(Icons.email_outlined, 'Email Support', 'support@pms-system.com', isDark, textColor, subTextColor),
               const SizedBox(height: 24),
-              _contactInfoRow(Icons.phone_outlined, 'Phone Support', '+1 (800) 555-0199'),
+              _contactInfoRow(Icons.phone_outlined, 'Phone Support', '+1 (800) 555-0199', isDark, textColor, subTextColor),
               const SizedBox(height: 24),
-              _contactInfoRow(Icons.access_time, 'Business Hours', 'Mon-Fri, 9:00 AM - 5:00 PM'),
+              _contactInfoRow(Icons.access_time, 'Business Hours', 'Mon-Fri, 9:00 AM - 5:00 PM', isDark, textColor, subTextColor),
             ],
           ),
         ),
@@ -376,21 +392,35 @@ ${_messageCtrl.text}
           flex: 2,
           child: Container(
             padding: const EdgeInsets.all(32),
-            decoration: _cardDecoration(),
+            decoration: _cardDecoration(isDark),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Send us a Ticket', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text('Send us a Ticket', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                 const SizedBox(height: 24),
                 TextField(
                   controller: _subjectCtrl,
-                  decoration: InputDecoration(labelText: 'Subject', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
+                  style: TextStyle(color: textColor),
+                  decoration: InputDecoration(
+                    labelText: 'Subject', 
+                    labelStyle: TextStyle(color: subTextColor),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[400]!)), 
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[400]!)),
+                    isDense: true
+                  ),
                 ),
                 const SizedBox(height: 20),
                 TextField(
                   controller: _messageCtrl,
                   maxLines: 6,
-                  decoration: InputDecoration(labelText: 'Describe your issue...', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), alignLabelWithHint: true),
+                  style: TextStyle(color: textColor),
+                  decoration: InputDecoration(
+                    labelText: 'Describe your issue...', 
+                    labelStyle: TextStyle(color: subTextColor),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[400]!)), 
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[400]!)),
+                    alignLabelWithHint: true
+                  ),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -400,7 +430,7 @@ ${_messageCtrl.text}
                     onPressed: _isSending ? null : _sendMessage,
                     icon: _isSending ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.send),
                     label: Text(_isSending ? 'Sending...' : 'Submit Support Ticket', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                    style: ElevatedButton.styleFrom(backgroundColor: isDark ? Colors.blue[600] : Colors.blue[700], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                   ),
                 )
               ],
@@ -411,21 +441,21 @@ ${_messageCtrl.text}
     );
   }
 
-  Widget _contactInfoRow(IconData icon, String title, String value) {
+  Widget _contactInfoRow(IconData icon, String title, String value, bool isDark, Color textColor, Color subTextColor) {
     return Row(
       children: [
         Container(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8)),
-          child: Icon(icon, color: Colors.blue[700], size: 24),
+          decoration: BoxDecoration(color: isDark ? Colors.blue[900]!.withOpacity(0.3) : Colors.blue[50], borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, color: isDark ? Colors.blue[400] : Colors.blue[700], size: 24),
         ),
         const SizedBox(width: 16),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.bold)),
+            Text(title, style: TextStyle(color: subTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
             const SizedBox(height: 2),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+            Text(value, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: textColor)),
           ],
         )
       ],
@@ -442,13 +472,20 @@ class _GuideDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF121212) : const Color(0xFFF9FAFB);
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subTextColor = isDark ? Colors.grey[400]! : Colors.grey[700]!;
+    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final borderColor = isDark ? Colors.grey[800]! : Colors.grey[200]!;
+
     final List<Map<String, String>> features = (guide['features'] as List<dynamic>).map((e) => Map<String, String>.from(e as Map)).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: bgColor,
       appBar: AppBar(
         title: const Text('Module Documentation', style: TextStyle(fontSize: 16)),
-        backgroundColor: const Color(0xFF1A1F36), // Deep navy to match reports
+        backgroundColor: const Color(0xFF1A1F36), // Deep navy to match reports (Looks good in light/dark)
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -460,7 +497,7 @@ class _GuideDetailScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 64),
               decoration: const BoxDecoration(
-                color: Color(0xFF1A1F36),
+                color: Color(0xFF1A1F36), // Keeping the hero banner deep navy
               ),
               child: Row(
                 children: [
@@ -496,14 +533,19 @@ class _GuideDetailScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Module Overview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                        Text('Module Overview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                         const SizedBox(height: 16),
                         Container(
                           padding: const EdgeInsets.all(32),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey[200]!), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))]),
+                          decoration: BoxDecoration(
+                            color: cardColor, 
+                            borderRadius: BorderRadius.circular(16), 
+                            border: Border.all(color: borderColor), 
+                            boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))]
+                          ),
                           child: Text(
                             guide['definition'] as String,
-                            style: TextStyle(fontSize: 15, height: 1.8, color: Colors.grey[800]),
+                            style: TextStyle(fontSize: 15, height: 1.8, color: subTextColor),
                           ),
                         ),
                       ],
@@ -518,7 +560,7 @@ class _GuideDetailScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Key Features & Workflows', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                        Text('Key Features & Workflows', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                         const SizedBox(height: 16),
                         ListView.builder(
                           shrinkWrap: true,
@@ -528,23 +570,28 @@ class _GuideDetailScreen extends StatelessWidget {
                             return Container(
                               margin: const EdgeInsets.only(bottom: 16),
                               padding: const EdgeInsets.all(24.0),
-                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey[200]!), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))]),
+                              decoration: BoxDecoration(
+                                color: cardColor, 
+                                borderRadius: BorderRadius.circular(16), 
+                                border: Border.all(color: borderColor), 
+                                boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))]
+                              ),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   CircleAvatar(
                                     radius: 18,
-                                    backgroundColor: Colors.blue[50],
-                                    child: Text('${i + 1}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[800])),
+                                    backgroundColor: isDark ? Colors.blue[900]!.withOpacity(0.3) : Colors.blue[50],
+                                    child: Text('${i + 1}', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.blue[300] : Colors.blue[800])),
                                   ),
                                   const SizedBox(width: 20),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(features[i]['title']!, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                        Text(features[i]['title']!, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
                                         const SizedBox(height: 8),
-                                        Text(features[i]['detail']!, style: TextStyle(color: Colors.grey[700], height: 1.5)),
+                                        Text(features[i]['detail']!, style: TextStyle(color: subTextColor, height: 1.5)),
                                       ],
                                     ),
                                   )
