@@ -41,7 +41,10 @@ ISSUES: 95% done when finished
  - - - - - - - - / - - - - - - -  - - - - - / - - - - - - - - - / - - - - - - - - - -
 
  ISSUES: 85% done when finished
-- no option yet for sales to print,
-- add a more detailed reciept
+- no option yet for sales to print, (done)
+- add a more detailed reciept (done)
 - add AES encryption for backup data
- - 
+ - stock needs to be editable even tho bawal just because (done)
+ - products should be archived not deleted (done)
+- in reports add payment breakdown also (done)
+- 

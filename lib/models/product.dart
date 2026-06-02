@@ -5,13 +5,14 @@ class Product {
   double price;
   int stock;
   int reorderLevel;
+  String status;         // <--- This is now a normal, editable variable!
   String barcode;
   String description;
   String createdAt;
   String updatedAt;
   String? expirationDate; 
   bool autoDispose;       
-  String? imagePath; // <--- NEW: Stores the local file path to the product image
+  String? imagePath; 
 
   Product({
     required this.id,
@@ -20,24 +21,17 @@ class Product {
     required this.price,
     required this.stock,
     required this.reorderLevel,
+    this.status = 'Active', // <--- Default status is Active
     this.barcode = '',
     this.description = '',
     required this.createdAt,
     required this.updatedAt,
     this.expirationDate,
     this.autoDispose = false,
-    this.imagePath, // <--- NEW
+    this.imagePath, 
   });
 
-  String get status {
-    if (expirationDate != null && stock > 0) {
-      final exp = DateTime.parse(expirationDate!);
-      if (DateTime.now().isAfter(exp)) return 'Expired';
-    }
-    if (stock <= 0) return 'Out of Stock';
-    if (stock <= reorderLevel) return 'Low Stock';
-    return 'In Stock';
-  }
+  // *** DELETED THE 'String get status { ... }' BLOCK ENTIRELY ***
 
   factory Product.fromJson(Map<String, dynamic> json) {
     return Product(
@@ -47,13 +41,14 @@ class Product {
       price: (json['price'] as num).toDouble(), 
       stock: json['stock'] as int,
       reorderLevel: json['reorderLevel'] as int,
+      status: json['status'] as String? ?? 'Active', // <--- Loads status from database
       barcode: json['barcode'] as String? ?? '',
       description: json['description'] as String? ?? '',
       createdAt: json['createdAt'] as String? ?? DateTime.now().toIso8601String(),
       updatedAt: json['updatedAt'] as String? ?? DateTime.now().toIso8601String(),
       expirationDate: json['expirationDate'] as String?,
       autoDispose: json['autoDispose'] == 1 || json['autoDispose'] == true,
-      imagePath: json['imagePath'] as String?, // <--- NEW
+      imagePath: json['imagePath'] as String?, 
     );
   }
 
@@ -65,13 +60,14 @@ class Product {
       'price': price,
       'stock': stock,
       'reorderLevel': reorderLevel,
+      'status': status, // <--- Saves 'Archived' status to database
       'barcode': barcode,
       'description': description,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'expirationDate': expirationDate,
       'autoDispose': autoDispose ? 1 : 0, 
-      'imagePath': imagePath, // <--- NEW
+      'imagePath': imagePath, 
     };
   }
 }

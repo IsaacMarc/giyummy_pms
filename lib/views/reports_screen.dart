@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:math';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -18,9 +20,16 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   int _selectedTab = 0; // 0 = Sales, 1 = Inventory
-  String _dateRange = 'Last 7 Days';
+  String _dateRange = 'Today';
   
-  final double _dailyRevenueTarget = 5000.0;
+  // NEW: Static map keeps goals saved persistently across tab switches!
+  static final Map<String, double> _revenueTargets = {
+    'Today': 5000.0,
+    'Last 7 Days': 35000.0,
+    'Last 30 Days': 150000.0,
+    'Year to Date': 1800000.0,
+  };
+
   // --- DATA FILTERING ---
   List<Sale> _getFilteredSales(List<Sale> allSales) {
     final now = DateTime.now();
@@ -55,12 +64,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     double grandTotal = 0.0;
     
-    // Map our low-stock items into rows for the PDF table
     final tableData = itemsToOrder.map((p) {
       int suggestedOrder = (p.reorderLevel * 2) - p.stock;
       if (suggestedOrder < 20) suggestedOrder = 20; 
       
-      final estUnitCost = p.price * 0.60; // Estimated 60% wholesale cost
+      final estUnitCost = p.price * 0.60; 
       final lineTotal = suggestedOrder * estUnitCost;
       grandTotal += lineTotal;
 
@@ -105,12 +113,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             pw.SizedBox(height: 32),
             
-            // To: Supplier (Placeholder for now)
             pw.Text('TO SUPPLIER:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
             pw.Text('General Supplier / Distributor'),
             pw.SizedBox(height: 24),
             
-            // The Items Table
             pw.TableHelper.fromTextArray(
               headers: ['Barcode', 'Item Description', 'Qty Ordered', 'Est. Unit Cost', 'Line Total'],
               data: tableData,
@@ -128,7 +134,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             pw.SizedBox(height: 24),
             
-            // Grand Total
             pw.Container(
               alignment: pw.Alignment.centerRight,
               child: pw.Row(
@@ -141,7 +146,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             pw.SizedBox(height: 40),
             
-            // Signatures
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
@@ -159,14 +163,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
     );
 
-    // This opens the device's native print/save dialog!
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(), 
       name: 'Purchase_Order_${DateFormat('yyyyMMdd').format(now)}.pdf'
     );
   }
 
-  // --- EXCEL EXPORT (Keeps your existing setup) ---
   void _exportToExcel() async {
     final provider = context.read<AppProvider>();
     final error = await ExcelService.exportMasterReport(provider.getSales(), provider.getProducts(), _dateRange);
@@ -178,13 +180,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-// --- PDF EXPORT LOGIC ---
   Future<void> _exportToPDF(List<Sale> sales, List<Product> products) async {
     final pdf = pw.Document();
     final fmt = NumberFormat.currency(symbol: 'PHP ');
 
     if (_selectedTab == 0) {
-      // SALES PDF
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
@@ -218,7 +218,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
       );
     } else {
-      // INVENTORY PDF
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4.landscape, 
@@ -239,14 +238,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 cellStyle: const pw.TextStyle(fontSize: 8), 
                 cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6), 
                 columnWidths: {
-                  0: const pw.FlexColumnWidth(0.2), // Barcode
-                  1: const pw.FlexColumnWidth(0.2), // Name
-                  2: const pw.FlexColumnWidth(0.2), // Category
-                  3: const pw.FlexColumnWidth(0.2), // Price
-                  4: const pw.FlexColumnWidth(0.2), // Stock
-                  5: const pw.FlexColumnWidth(0.2), // Reorder
-                  6: const pw.FlexColumnWidth(0.2), // Status
-                  7: const pw.FlexColumnWidth(0.2), // Expiration
+                  0: const pw.FlexColumnWidth(0.2), 
+                  1: const pw.FlexColumnWidth(0.2), 
+                  2: const pw.FlexColumnWidth(0.2), 
+                  3: const pw.FlexColumnWidth(0.2), 
+                  4: const pw.FlexColumnWidth(0.2), 
+                  5: const pw.FlexColumnWidth(0.2), 
+                  6: const pw.FlexColumnWidth(0.2), 
+                  7: const pw.FlexColumnWidth(0.2), 
                 },
                 cellAlignments: {
                   3: pw.Alignment.center, 
@@ -262,6 +261,48 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
 
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save(), name: 'Report_${_selectedTab == 0 ? "Sales" : "Inventory"}.pdf');
+  }
+
+  // --- NEW: Edit Target Goal Dialog ---
+  void _editTargetGoal(BuildContext context, String range, Color textColor, Color borderColor) {
+    final ctrl = TextEditingController(text: _revenueTargets[range]?.toStringAsFixed(0));
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text('Edit Goal for $range', style: TextStyle(color: textColor)),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          style: TextStyle(color: textColor),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(
+            labelText: 'Target Amount (₱)',
+            labelStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[700]),
+            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            prefixText: '₱ ',
+            prefixStyle: TextStyle(color: textColor),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              final val = double.tryParse(ctrl.text);
+              if (val != null && val > 0) {
+                setState(() => _revenueTargets[range] = val);
+              }
+              Navigator.pop(ctx);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white),
+            child: const Text('Save Target'),
+          )
+        ]
+      )
+    );
   }
 
   @override
@@ -345,7 +386,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  // --- TAB UI COMPONENT ---
   Widget _buildTabCard(int index, String title, String subtitle, IconData icon, bool isDark) {
     final isSelected = _selectedTab == index;
     return Expanded(
@@ -379,23 +419,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
   // ==========================================
   Widget _buildSalesView(List<Sale> sales, bool isDark, Color textColor, Color subTextColor) {
     final fmt = NumberFormat.currency(symbol: '₱');
+    final borderColor = isDark ? Colors.grey[800]! : Colors.grey[200]!;
     
-    // --- ADVANCED METRICS ---
     final totalRevenue = sales.fold(0.0, (sum, s) => sum + s.finalTotal);
     final totalDiscounts = sales.fold(0.0, (sum, s) => sum + s.discount);
     final totalCOGS = sales.fold(0.0, (sum, s) => sum + (s.finalTotal * 0.70)); 
     final trueProfit = totalRevenue - totalCOGS;
 
-    // Target Calculation
-    int days = 7;
-    if (_dateRange == 'Today') days = 1;
-    if (_dateRange == 'Last 30 Days') days = 30;
-    final targetGoal = _dailyRevenueTarget * days;
+    // --- NEW: Grab the specific target for the selected date range ---
+    final targetGoal = _revenueTargets[_dateRange] ?? 5000.0;
     final targetHit = totalRevenue >= targetGoal;
     final progress = (totalRevenue / targetGoal).clamp(0.0, 1.0);
     final remaining = targetGoal - totalRevenue;
 
-    // Payment Mix Calculation
     final paymentMix = <String, double>{};
     for (var s in sales) {
       paymentMix[s.paymentMethod] = (paymentMix[s.paymentMethod] ?? 0) + s.finalTotal;
@@ -494,7 +530,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Expanded(
               flex: 5,
               child: Container(
-                height: 320,
+                height: 350,
                 padding: const EdgeInsets.all(20),
                 decoration: _cardDecoration(isDark),
                 child: Column(
@@ -512,7 +548,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Expanded(
               flex: 3,
               child: Container(
-                height: 320,
+                height: 350,
                 padding: const EdgeInsets.all(20),
                 decoration: _cardDecoration(isDark),
                 child: Column(
@@ -523,7 +559,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     const SizedBox(height: 24),
                     Expanded(child: _buildPaymentMixChart(paymentMix, isDark)),
                     const SizedBox(height: 16),
-                    Divider(color: isDark ? Colors.grey[800] : Colors.grey[200]),
+                    
+                    // --- NEW: Detailed Payment Breakdown ---
+                    Text('Payment Breakdown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
+                    const SizedBox(height: 8),
+                    ...paymentMix.entries.map((e) {
+                      final pct = totalRevenue > 0 ? (e.value / totalRevenue * 100) : 0.0;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('${e.key} (${pct.toStringAsFixed(1)}%)', style: TextStyle(color: subTextColor, fontSize: 13)),
+                            Text(fmt.format(e.value), style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                          ]
+                        )
+                      );
+                    }),
+                    
+                    const SizedBox(height: 8),
+                    Divider(color: borderColor),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -542,33 +597,51 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
         // --- ROW 3: SALES GOAL ---
         Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           decoration: _cardDecoration(isDark),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Sales Goal Progress', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-              Text(_dateRange, style: TextStyle(color: subTextColor, fontSize: 12)),
-              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Sales Goal Progress', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: textColor)),
+                      Text(_dateRange, style: TextStyle(color: subTextColor, fontSize: 13)),
+                    ],
+                  ),
+                  // --- NEW: Editable Goal Button ---
+                  OutlinedButton.icon(
+                    onPressed: () => _editTargetGoal(context, _dateRange, textColor, borderColor),
+                    icon: const Icon(Icons.edit, size: 16),
+                    label: const Text('Edit Goal'),
+                    style: OutlinedButton.styleFrom(foregroundColor: isDark ? Colors.blue[400] : Colors.blue[700], side: BorderSide(color: isDark ? Colors.blue[900]! : Colors.blue[200]!)),
+                  )
+                ],
+              ),
+              const SizedBox(height: 32),
               Row(
                 children: [
+                  // --- NEW: Enlarged Goal Ring ---
                   SizedBox(
-                    height: 100, width: 100,
+                    height: 140, width: 140,
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        CircularProgressIndicator(value: progress, strokeWidth: 10, backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100], color: isDark ? Colors.blue[400] : Colors.blue[600]),
+                        CircularProgressIndicator(value: progress, strokeWidth: 14, backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100], color: isDark ? Colors.blue[400] : Colors.blue[600]),
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('${(progress * 100).toStringAsFixed(0)}%', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: textColor)),
-                            Text('of goal', style: TextStyle(color: subTextColor, fontSize: 10)),
+                            Text('${(progress * 100).toStringAsFixed(0)}%', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 26, color: textColor)),
+                            Text('of goal', style: TextStyle(color: subTextColor, fontSize: 11)),
                           ],
                         )
                       ],
                     ),
                   ),
-                  const SizedBox(width: 32),
+                  const SizedBox(width: 48),
                   Expanded(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -576,22 +649,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('ACHIEVED', style: TextStyle(color: subTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                            Text(fmt.format(totalRevenue), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: textColor)),
+                            Text('ACHIEVED', style: TextStyle(color: subTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text(fmt.format(totalRevenue), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: textColor)),
                           ],
                         ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('TARGET', style: TextStyle(color: subTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                            Text(fmt.format(targetGoal), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: isDark ? Colors.grey[500] : Colors.grey)),
+                            Text('TARGET', style: TextStyle(color: subTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text(fmt.format(targetGoal), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: isDark ? Colors.grey[500] : Colors.grey)),
                           ],
                         ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('REMAINING', style: TextStyle(color: subTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                            Text(remaining > 0 ? fmt.format(remaining) : '₱0.00', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: remaining > 0 ? (isDark ? Colors.orange[400] : Colors.orange[700]) : (isDark ? Colors.green[400] : Colors.green))),
+                            Text('REMAINING', style: TextStyle(color: subTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text(remaining > 0 ? fmt.format(remaining) : '₱0.00', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: remaining > 0 ? (isDark ? Colors.orange[400] : Colors.orange[700]) : (isDark ? Colors.green[400] : Colors.green))),
                           ],
                         ),
                       ],
@@ -612,7 +685,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildInventoryView(List<Product> products, List<Sale> filteredSales, List<Sale> allSales, bool isDark, Color textColor, Color subTextColor) {
     final fmt = NumberFormat.currency(symbol: '₱');
     
-    // --- ADVANCED METRICS ---
     final totalValue = products.fold(0.0, (sum, p) => sum + (p.price * p.stock));
     final expiredProducts = products.where((p) => p.status == 'Expired').toList();
     final spoilageValue = expiredProducts.fold(0.0, (sum, p) => sum + (p.price * p.stock));
@@ -649,7 +721,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Date Filters
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
@@ -671,7 +742,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
         const SizedBox(height: 24),
 
-        // --- ENHANCED KPIs ---
         Row(
           children: [
             _buildKPI('Total Stock Value', fmt.format(totalValue), Colors.green, isDark),
@@ -685,11 +755,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
         const SizedBox(height: 24),
 
-        // --- ROW 1: TOP ITEMS | STOCK PIE | DEAD STOCK ---
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Top Items
             Expanded(
               flex: 4,
               child: Container(
@@ -753,7 +821,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             const SizedBox(width: 24),
 
-            // 2. Stock Distribution
             Expanded(
               flex: 4,
               child: Container(
@@ -772,7 +839,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             const SizedBox(width: 24),
 
-            // 3. Dead Stock Radar
             Expanded(
               flex: 4,
               child: Container(
@@ -800,11 +866,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
         const SizedBox(height: 24),
 
-        // --- ROW 2: CATEGORY BAR & RESTOCK PO ---
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Value by Category
             Expanded(
               flex: 1,
               child: Container(
@@ -823,7 +887,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             const SizedBox(width: 24),
 
-            // 2. Restock Plan
             Expanded(
               flex: 1,
               child: Container(
@@ -863,8 +926,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  // --- UI HELPERS & CHARTS ---
-
   BoxDecoration _cardDecoration(bool isDark) => BoxDecoration(
     color: isDark ? const Color(0xFF1E1E1E) : Colors.white, 
     borderRadius: BorderRadius.circular(12), 
@@ -900,12 +961,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final sortedKeys = grouped.keys.toList()..sort();
     List<FlSpot> spots = sortedKeys.map((day) => FlSpot(day.toDouble(), grouped[day]!)).toList();
 
+    // Prevent crashing on empty or zero lines
+    final rawMax = spots.isEmpty ? 10000.0 : spots.map((s) => s.y).reduce(max) * 1.2;
+    final maxY = rawMax <= 0 ? 10000.0 : rawMax;
+    final interval = (maxY / 4) <= 0 ? 2500.0 : (maxY / 4).ceilToDouble();
+
     return LineChart(
       LineChartData(
         gridData: FlGridData(
           show: true, 
           drawVerticalLine: false, 
-          horizontalInterval: 5000,
+          horizontalInterval: interval,
           getDrawingHorizontalLine: (value) => FlLine(color: isDark ? Colors.grey[800]! : Colors.grey[200]!, strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
@@ -971,38 +1037,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
       : [Colors.green, Colors.orange, Colors.blue, Colors.purple];
     final sections = paymentMix.entries.toList();
 
-    return Row(
-      children: [
-        Expanded(
-          child: PieChart(
-            PieChartData(
-              sectionsSpace: 2, centerSpaceRadius: 35,
-              sections: sections.asMap().entries.map((e) {
-                return PieChartSectionData(
-                  color: colors[e.key % colors.length],
-                  value: e.value.value,
-                  title: '', // Keep donut clean
-                  radius: 20,
-                );
-              }).toList()
-            )
-          )
-        ),
-        const SizedBox(width: 16),
-        Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: sections.asMap().entries.map((e) {
-            return Row(
-              children: [
-                Icon(Icons.circle, size: 10, color: colors[e.key % colors.length]),
-                const SizedBox(width: 8),
-                Text(e.value.key, style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[700], fontSize: 12)),
-              ],
-            );
-          }).toList(),
-        )
-      ],
+    return PieChart(
+      PieChartData(
+        sectionsSpace: 2, centerSpaceRadius: 40,
+        sections: sections.asMap().entries.map((e) {
+          return PieChartSectionData(
+            color: colors[e.key % colors.length],
+            value: e.value.value,
+            title: '', // Keep donut clean
+            radius: 20,
+          );
+        }).toList()
+      )
     );
   }
 
@@ -1055,7 +1101,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final sortedCats = catValue.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     final topCats = sortedCats.take(6).toList(); 
     
-    final maxY = topCats.isEmpty ? 100.0 : topCats.first.value * 1.3; 
+    final rawMax = topCats.isEmpty ? 100.0 : topCats.first.value * 1.3; 
+    final maxY = rawMax <= 0 ? 100.0 : rawMax;
 
     return BarChart(
       BarChartData(
@@ -1064,7 +1111,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         gridData: FlGridData(
           show: true, 
           drawVerticalLine: false, 
-          horizontalInterval: (maxY / 4).ceilToDouble(),
+          horizontalInterval: (maxY / 4) <= 0 ? 25.0 : (maxY / 4).ceilToDouble(),
           getDrawingHorizontalLine: (value) => FlLine(color: isDark ? Colors.grey[800]! : Colors.grey[200]!, strokeWidth: 1),
         ),
         
@@ -1189,7 +1236,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         gridData: FlGridData(
           show: true, 
           drawVerticalLine: false, 
-          horizontalInterval: (maxCount / 4) == 0 ? 1 : maxCount / 4,
+          horizontalInterval: (maxCount / 4) == 0 ? 1.0 : (maxCount / 4).ceilToDouble(),
           getDrawingHorizontalLine: (value) => FlLine(color: isDark ? Colors.grey[800]! : Colors.grey[200]!, strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),

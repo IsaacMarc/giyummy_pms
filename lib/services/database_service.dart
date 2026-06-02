@@ -74,6 +74,7 @@ class DatabaseService {
         reorderLevel INTEGER NOT NULL,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
+        status TEXT DEFAULT 'Active',
         barcode TEXT NOT NULL,
         description TEXT NOT NULL,
         expirationDate TEXT,             -- NEW

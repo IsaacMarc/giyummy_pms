@@ -175,7 +175,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                         title: Text('Account Active', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                         subtitle: Text(isActive ? 'User can log in to the system' : 'Account is currently disabled', style: TextStyle(color: isActive ? (isDark ? Colors.green[400] : Colors.green[700]) : (isDark ? Colors.red[400] : Colors.red[700]), fontSize: 12)),
                         value: isActive,
-                        activeColor: isDark ? Colors.blue[400] : Colors.blue[600],
+                        activeThumbColor: isDark ? Colors.blue[400] : Colors.blue[600],
                         onChanged: isCurrentUser ? null : (val) { // Prevent disabling own account
                           setDialogState(() {
                             isActive = val;
