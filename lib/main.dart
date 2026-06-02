@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/app_provider.dart';
@@ -19,7 +21,8 @@ import 'widgets/app_shell.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart'; 
 import 'dart:io'; 
 
-void main() async {
+
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize desktop DB factory
@@ -28,10 +31,29 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
   
-  // Remove the await here so runApp can execute
+  // Initialize storage and seed data
   await StorageService.instance.init(); 
   await seedIfNeeded();
 
+  // If the app is launched with the argument 'multi_window', 
+  // boot up the secondary screen instead of the main app!
+  if (args.firstOrNull == 'multi_window') {
+    final windowId = int.parse(args[1]);
+    
+    // Cast the decoded JSON to a Map<String, dynamic> so it matches the expected type
+    final Map<String, dynamic> argument = args[2].isEmpty ? {} : jsonDecode(args[2]);
+    
+    if (argument['type'] == 'customer_display') {
+      // NEW: Pass the payload directly into initialData for instant loading!
+      runApp(CustomerDisplayApp(
+        windowId: windowId, 
+        initialData: argument,
+      ));
+      return;
+    }
+  }
+
+  // Otherwise, run the normal POS Cashier system
   runApp(
     ChangeNotifierProvider(
       create: (_) => AppProvider()..restoreSession(),

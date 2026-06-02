@@ -1246,7 +1246,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             getTooltipColor: (group) => isDark ? Colors.blueGrey[800]! : Colors.blueGrey[700]!,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               return BarTooltipItem(
-                '${rod.toY.toInt()} txns',
+                '${rod.toY.toInt()} Sales',
                 const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)
               );
             }

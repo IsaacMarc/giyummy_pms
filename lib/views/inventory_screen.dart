@@ -93,9 +93,22 @@ class _InventoryScreenState extends State<InventoryScreen> {
               } else if (expA == null) cmp = 1; 
               else if (expB == null) cmp = -1;
               else cmp = expA.compareTo(expB);
-
               break;
-            case 8: cmp = a.status.compareTo(b.status); break; 
+            case 8: 
+              final now = DateTime.now();
+              // Helper function to calculate the visual status for sorting
+              String getDynamicStatus(Product p) {
+                if (p.status == 'Archived') return 'Archived';
+                if (p.stock <= 0) return 'Out of Stock';
+                final exp = _getNextExpiration(p.id, provider);
+                if (exp != null && exp.difference(now).inDays < 0) return 'Expired';
+                if (p.stock <= p.reorderLevel) return 'Low Stock';
+                return 'In Stock';
+              }
+              
+              // Sort alphabetically by the computed visual status
+              cmp = getDynamicStatus(a).compareTo(getDynamicStatus(b)); 
+              break;
         }
         return _sortAscending ? cmp : -cmp;
       });

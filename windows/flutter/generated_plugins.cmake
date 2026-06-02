@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
+  desktop_multi_window
   printing
   sqlite3_flutter_libs
 )

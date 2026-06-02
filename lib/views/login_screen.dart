@@ -3,6 +3,7 @@ import 'package:product_management/views/register_screen.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../services/storage_service.dart';
+import 'package:flutter/services.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -161,6 +162,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       prefixIcon: Icon(Icons.person_outline),
                       border: OutlineInputBorder(),
                     ),
+                    
+                    // ---> ADD THESE 3 LINES <---
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9_]')),
+                    ],
+                    
                     onSubmitted: (_) => _login(),
                   ),
                   const SizedBox(height: 16),

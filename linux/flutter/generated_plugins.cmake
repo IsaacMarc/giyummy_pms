@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  desktop_multi_window
   printing
   sqlite3_flutter_libs
 )
