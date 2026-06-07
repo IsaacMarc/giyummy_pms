@@ -330,7 +330,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           Expanded(
                             flex: 2,
                             child: DropdownButtonFormField<String>(
-                              value: _categoryFilter,
+                              initialValue: _categoryFilter,
                               dropdownColor: cardColor,
                               style: TextStyle(color: textColor),
                               decoration: InputDecoration(

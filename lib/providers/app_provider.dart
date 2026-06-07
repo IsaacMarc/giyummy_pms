@@ -121,33 +121,33 @@ Future<void> restoreSession() async {
   }
 
   Future<String?> login(String username, String password) async {
+    // 1. Verify credentials (safely catch if the user doesn't exist)
+    User user;
     try {
-      final user = _users.firstWhere(
+      user = _users.firstWhere(
         (u) => u.username == username && u.isActive,
       );
       if (!AuthService.verifyPassword(password, user.passwordHash)) {
         return 'Invalid username or password';
       }
-      
-      // Update memory
-      user.lastLogin = DateTime.now().toIso8601String();
-      _currentUser = user;
-      _currentPage = 'dashboard';
-      _storage.setCurrentUser(user);
-
-      await loadData();
-      // Instant UI response
-      notifyListeners(); 
-
-      // Background SQLite saves
-      await _storage.saveUser(user); 
-      await _addAuditLog('LOGIN', 'Auth', 'User logged in', user);
-      await _generateStockAlerts();
-      
-      return null;
     } catch (_) {
       return 'Invalid username or password';
     }
+
+    // 2. Database updates (If MySQL crashes here, it will accurately report it to the UI!)
+    user.lastLogin = DateTime.now().toIso8601String();
+    _currentUser = user;
+    _currentPage = 'dashboard';
+    _storage.setCurrentUser(user);
+
+    await loadData();
+    notifyListeners(); 
+
+    await _storage.saveUser(user); 
+    await _addAuditLog('LOGIN', 'Auth', 'User logged in', user);
+    await _generateStockAlerts();
+    
+    return null; // Success!
   }
 
   Future<String?> register(String username, String email, String password) async {

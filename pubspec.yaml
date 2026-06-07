@@ -28,6 +28,7 @@ dependencies:
   printing: ^5.14.3
   barcode_widget: ^2.0.4
   desktop_multi_window: ^0.2.0
+  mysql1: ^0.20.0  
 
 dev_dependencies:
   flutter_test:

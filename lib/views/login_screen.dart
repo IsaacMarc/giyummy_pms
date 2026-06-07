@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:product_management/views/dashboard_screen.dart';
 import 'package:product_management/views/register_screen.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
@@ -47,27 +48,41 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     }
     
-  void _login() async { // 1. Add 'async' to the main method
-    
-    // 2. Synchronously set the loading state so the spinner appears
+  void _login() async { 
     setState(() {
       _error = null;
       _loading = true;
     });
 
-    // 3. Await the database login call OUTSIDE of setState
-    final err = await context
-        .read<AppProvider>()
-        .login(_usernameCtrl.text.trim(), _passwordCtrl.text);
+    try {
+      final err = await context
+          .read<AppProvider>()
+          .login(_usernameCtrl.text.trim(), _passwordCtrl.text);
 
-    // 4. Ensure the widget is still on-screen before updating UI
-    if (!mounted) return;
+      if (!mounted) return;
 
-    // 5. Synchronously update the state with the final result
-    setState(() {
-      _error = err; // 'err' is now the resolved String, not a Future
-      _loading = false;
-    });
+      if (err != null) {
+        setState(() {
+          _error = err; 
+          _loading = false;
+        });
+      } else {
+        setState(() => _loading = false);
+        
+        // Push the user to the main layout
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const DashboardScreen()), // <-- Change this to your actual main screen widget!
+        );
+      }
+    } catch (e) {
+      // Catch any hidden MySQL crashes that happen during the login process!
+      if (!mounted) return;
+      setState(() {
+        _error = "Database Crash: $e"; 
+        _loading = false;
+      });
+    }
   }
 
   @override

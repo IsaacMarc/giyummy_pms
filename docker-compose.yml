@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  giyummy-db:
+    image: mariadb:10.4
+    container_name: giyummy_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root        # Your database password
+      MYSQL_DATABASE: giyummy_db       # Docker will auto-create this database!
+    ports:
+      - "3306:3306"                    # Maps Docker's port to your Windows port
+    volumes:
+      - giyummy_mysql_data:/var/lib/mysql # Saves your data so it isn't lost on restart
+
+volumes:
+  giyummy_mysql_data:

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:product_management/views/login_screen.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 
@@ -21,7 +22,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _error;
   bool _isLoading = false;
 
-  void _setupSuperAdmin() async {
+void _setupSuperAdmin() async {
     if (_userCtrl.text.isEmpty || _passCtrl.text.isEmpty || _fNameCtrl.text.isEmpty || _lNameCtrl.text.isEmpty) {
       setState(() => _error = 'Please fill out all required fields.');
       return;
@@ -31,30 +32,50 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _error = null; 
+      _isLoading = true;
+    });
     
-    final provider = context.read<AppProvider>();
-    final err = await provider.adminAddUser(
-      _userCtrl.text.trim(), 
-      '', // email
-      _passCtrl.text, 
-      'Admin', // FORCED ROLE
-      'Administration', // default department
-      '', // phone
-      _empIdCtrl.text.trim(),
-      _fNameCtrl.text.trim(),
-      _miCtrl.text.trim(),
-      _lNameCtrl.text.trim(),
-    );
+    try {
+      final provider = context.read<AppProvider>();
+      final err = await provider.adminAddUser(
+        _userCtrl.text.trim(), 
+        '', 
+        _passCtrl.text, 
+        'Admin', 
+        'Administration', 
+        '', 
+        _empIdCtrl.text.trim(),
+        _fNameCtrl.text.trim(),
+        _miCtrl.text.trim(),
+        _lNameCtrl.text.trim(),
+      );
 
-    if (err != null) {
+      if (!mounted) return;
+
+      if (err != null) {
+        setState(() {
+          _error = err;
+          _isLoading = false;
+        });
+      } else {
+        // SUCCESS: Stop the spinner and route to Login Screen
+        if (mounted) {
+          setState(() => _isLoading = false);
+          
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _error = err;
-        _isLoading = false;
+        _error = "Database Crash: $e";
+        _isLoading = false; 
       });
-    } else {
-      // Auto-login the new super admin
-      await provider.login(_userCtrl.text.trim(), _passCtrl.text);
     }
   }
 

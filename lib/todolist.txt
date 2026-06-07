@@ -47,4 +47,7 @@ ISSUES: 95% done when finished
  - stock needs to be editable even tho bawal just because (done)
  - products should be archived not deleted (done)
 - in reports add payment breakdown also (done)
-- 
+
+
+KNOWN BUGS
+ - When using the sales Module

@@ -14,8 +14,19 @@ class MaintenanceScreen extends StatefulWidget {
 }
 
 class _MaintenanceScreenState extends State<MaintenanceScreen> {
-  static const int _itemsPerPage = 10; // Increased to fill the larger card
+  static const int _itemsPerPage = 10; 
   int _currentPage = 0;
+
+  // --- NEW: Filter State Variables ---
+  String _searchQuery = '';
+  String _selectedAction = 'ALL';
+  final TextEditingController _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   BoxDecoration _cardDecoration(bool isDark) {
     return BoxDecoration(
@@ -34,18 +45,28 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
     final subTextColor = isDark ? Colors.grey[400]! : Colors.grey[600]!;
 
     final provider = context.watch<AppProvider>();
-    final logs = provider.getAuditLogs();
     final backups = provider.getBackups();
     final dtFmt = DateFormat('MMM d, yyyy HH:mm:ss');
     
-    final allLogs = context.watch<AppProvider>().getAuditLogs();
-    final totalPages = (allLogs.length / _itemsPerPage).ceil();
+    // --- NEW: Advanced Filtering Logic ---
+    final rawLogs = provider.getAuditLogs();
+    final filteredLogs = rawLogs.where((log) {
+      final matchesSearch = log.username.toLowerCase().contains(_searchQuery.toLowerCase()) || 
+                            log.details.toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesAction = _selectedAction == 'ALL' || log.action == _selectedAction;
+      return matchesSearch && matchesAction;
+    }).toList();
+
+    // Recalculate pagination based on filtered results
+    final totalPages = (filteredLogs.length / _itemsPerPage).ceil();
     if (_currentPage >= totalPages && totalPages > 0) {
       _currentPage = totalPages - 1; 
+    } else if (totalPages == 0) {
+      _currentPage = 0;
     }
 
-    final paginatedLogs = allLogs.isNotEmpty 
-        ? allLogs.skip(_currentPage * _itemsPerPage).take(_itemsPerPage).toList()
+    final paginatedLogs = filteredLogs.isNotEmpty 
+        ? filteredLogs.skip(_currentPage * _itemsPerPage).take(_itemsPerPage).toList()
         : <AuditLog>[];
 
     return Scaffold(
@@ -86,7 +107,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                   const SizedBox(width: 16),
                   _buildStatCard('Total Sales', provider.getSales().length.toString(), Icons.point_of_sale, Colors.green, isDark),
                   const SizedBox(width: 16),
-                  _buildStatCard('Audit Logs', logs.length.toString(), Icons.history, Colors.purple, isDark),
+                  _buildStatCard('Audit Logs', rawLogs.length.toString(), Icons.history, Colors.purple, isDark),
                 ],
               ),
               const SizedBox(height: 24),
@@ -200,13 +221,78 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                               Text('System Audit Logs', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: textColor)),
                             ],
                           ),
-                          Text('Last ${logs.length} entries', style: TextStyle(color: subTextColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text('Found ${filteredLogs.length} entries', style: TextStyle(color: subTextColor, fontSize: 13, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
                     Divider(height: 1, color: isDark ? Colors.grey[800] : Colors.grey[200]),
                     
-                    // Force the DataTable to stretch to fill the card
+                    // --- NEW: SEARCH & FILTER BAR ---
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: _searchCtrl,
+                              onChanged: (val) => setState(() {
+                                _searchQuery = val;
+                                _currentPage = 0; // Reset to page 1 on new search
+                              }),
+                              decoration: InputDecoration(
+                                hintText: 'Search by username or action details...',
+                                prefixIcon: const Icon(Icons.search),
+                                filled: true,
+                                fillColor: isDark ? Colors.grey[900] : Colors.grey[50],
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: isDark ? Colors.grey[800]! : Colors.grey[300]!),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 1,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.grey[900] : Colors.grey[50],
+                                border: Border.all(color: isDark ? Colors.grey[800]! : Colors.grey[300]!),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  isExpanded: true,
+                                  value: _selectedAction,
+                                  icon: const Icon(Icons.filter_list),
+                                  items: ['ALL', 'LOGIN', 'LOGOUT', 'CREATE', 'UPDATE', 'DELETE', 'SALE', 'BACKUP', 'RESTORE']
+                                      .map((a) => DropdownMenuItem(value: a, child: Text(a == 'ALL' ? 'All Actions' : a, style: TextStyle(fontWeight: a == 'ALL' ? FontWeight.bold : FontWeight.normal))))
+                                      .toList(),
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setState(() {
+                                        _selectedAction = val;
+                                        _currentPage = 0; // Reset to page 1 on filter
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(height: 1, color: isDark ? Colors.grey[800] : Colors.grey[200]),
+
+                    // --- DATA TABLE ---
                     LayoutBuilder(
                       builder: (context, constraints) {
                         return SingleChildScrollView(
@@ -215,9 +301,10 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                             constraints: BoxConstraints(minWidth: constraints.maxWidth),
                             child: DataTable(
                               headingRowColor: WidgetStateProperty.all(isDark ? Colors.grey[900] : Colors.grey[50]),
-                              dataRowMinHeight: 50,
-                              dataRowMaxHeight: 50,
+                              dataRowMinHeight: 56,
+                              dataRowMaxHeight: 56,
                               horizontalMargin: 24,
+                              showCheckboxColumn: false,
                               columns: [
                                 DataColumn(label: Text('TIMESTAMP', style: TextStyle(color: subTextColor, fontWeight: FontWeight.bold, fontSize: 12))),
                                 DataColumn(label: Text('USER', style: TextStyle(color: subTextColor, fontWeight: FontWeight.bold, fontSize: 12))),
@@ -228,22 +315,33 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                               rows: paginatedLogs.map((log) {
                                 DateTime? t;
                                 try { t = DateTime.parse(log.timestamp); } catch (_) {}
-                                return DataRow(cells: [
-                                  DataCell(Text(t != null ? dtFmt.format(t) : log.timestamp, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: textColor))),
-                                  DataCell(Text(log.username, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor))),
-                                  DataCell(_actionBadge(log.action, isDark)),
-                                  DataCell(Text(log.module, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor))),
-                                  DataCell(
-                                    SizedBox(
-                                      width: 350, // Gives the details column plenty of room
-                                      child: Text(
-                                        log.details,
-                                        style: TextStyle(fontSize: 13, color: isDark ? Colors.grey[300] : Colors.grey[700]),
-                                        overflow: TextOverflow.ellipsis
-                                      ),
-                                    )
-                                  ),
-                                ]);
+                                return DataRow(
+                                  // NEW: Make row clickable to show details dialog
+                                  onSelectChanged: (_) => _showLogDetails(context, log, isDark, dtFmt),
+                                  cells: [
+                                    DataCell(Text(t != null ? dtFmt.format(t) : log.timestamp, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: textColor))),
+                                    DataCell(Text(log.username, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor))),
+                                    DataCell(_actionBadge(log.action, isDark)),
+                                    DataCell(Text(log.module, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor))),
+                                    DataCell(
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          SizedBox(
+                                            width: 250, 
+                                            child: Text(
+                                              log.details,
+                                              style: TextStyle(fontSize: 13, color: isDark ? Colors.grey[300] : Colors.grey[700]),
+                                              overflow: TextOverflow.ellipsis
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Icon(Icons.open_in_new, size: 16, color: isDark ? Colors.grey[600] : Colors.grey[400]),
+                                        ],
+                                      )
+                                    ),
+                                  ]
+                                );
                               }).toList(),
                             ),
                           ),
@@ -251,15 +349,15 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                       }
                     ),
                     
-                    if (logs.isEmpty)
+                    if (filteredLogs.isEmpty)
                       Padding(
-                        padding: const EdgeInsets.all(32),
+                        padding: const EdgeInsets.all(48),
                         child: Center(
                           child: Column(
                             children: [
-                              Icon(Icons.history_toggle_off, size: 48, color: isDark ? Colors.grey[700] : Colors.grey[300]),
+                              Icon(Icons.search_off_rounded, size: 48, color: isDark ? Colors.grey[700] : Colors.grey[300]),
                               const SizedBox(height: 16),
-                              Text('No audit logs recorded yet.', style: TextStyle(color: subTextColor, fontSize: 16)),
+                              Text('No logs matched your search or filter.', style: TextStyle(color: subTextColor, fontSize: 16)),
                             ],
                           ),
                         ),
@@ -267,13 +365,13 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                       
                     Divider(height: 1, color: isDark ? Colors.grey[800] : Colors.grey[200]),
                     
-                    // Pagination
+                    // --- PAGINATION ---
                     Padding(
                       padding: const EdgeInsets.all(16),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Showing ${allLogs.isEmpty ? 0 : (_currentPage * _itemsPerPage) + 1} - ${min((_currentPage + 1) * _itemsPerPage, allLogs.length)} of ${allLogs.length} logs', style: TextStyle(color: subTextColor, fontSize: 13)),
+                          Text('Showing ${filteredLogs.isEmpty ? 0 : (_currentPage * _itemsPerPage) + 1} - ${min((_currentPage + 1) * _itemsPerPage, filteredLogs.length)} of ${filteredLogs.length} logs', style: TextStyle(color: subTextColor, fontSize: 13)),
                           Row(
                             children: [
                               OutlinedButton(
@@ -298,6 +396,78 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // --- NEW: Detailed Log Popup Dialog ---
+  void _showLogDetails(BuildContext context, AuditLog log, bool isDark, DateFormat dtFmt) {
+    DateTime? t;
+    try { t = DateTime.parse(log.timestamp); } catch (_) {}
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            _actionBadge(log.action, isDark),
+            const SizedBox(width: 12),
+            Text('Audit Record Details', style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _detailRow('Timestamp', t != null ? dtFmt.format(t) : log.timestamp, isDark),
+              _detailRow('User', log.username, isDark),
+              _detailRow('Module', log.module, isDark),
+              _detailRow('Action Type', log.action, isDark),
+              _detailRow('Database ID', log.id, isDark),
+              const SizedBox(height: 24),
+              Text('Detailed Message:', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 13)),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey[900] : Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: isDark ? Colors.grey[800]! : Colors.grey[200]!)
+                ),
+                child: SelectableText(log.details, style: TextStyle(color: isDark ? Colors.grey[300] : Colors.grey[800], height: 1.5)),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx), 
+            child: const Text('Close Window')
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120, 
+            child: Text(label, style: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[600], fontSize: 14))
+          ),
+          Expanded(
+            child: SelectableText(value, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87, fontSize: 14))
+          ),
+        ],
       ),
     );
   }
