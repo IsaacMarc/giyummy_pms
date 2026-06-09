@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:product_management/views/settings_screen.dart';
 import 'package:provider/provider.dart';
 import 'providers/app_provider.dart';
 import 'services/storage_service.dart';
@@ -173,6 +174,8 @@ class _AppRouter extends StatelessWidget {
         return const HelpScreen();
       case 'about':
         return const AboutScreen();
+      case 'settings':
+      return const SettingsScreen();
       default:
         return const DashboardScreen();
     }

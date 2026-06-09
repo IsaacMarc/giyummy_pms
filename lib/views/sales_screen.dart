@@ -24,11 +24,11 @@ class _SalesScreenState extends State<SalesScreen> {
   final _barcodeCtrl = TextEditingController();
   final _discountCtrl = TextEditingController(text: '0');
   final _amountGivenCtrl = TextEditingController(); 
-  final _searchCtrl = TextEditingController(); // NEW: Product Search Controller
+  final _searchCtrl = TextEditingController(); 
   
   String _paymentMethod = 'Cash';
   String _selectedCategory = 'All'; 
-  String _searchQuery = ''; // NEW: Tracks the current search text
+  String _searchQuery = ''; 
   String? _error;
   String? _success;
   
@@ -55,7 +55,7 @@ class _SalesScreenState extends State<SalesScreen> {
     _barcodeCtrl.dispose();
     _discountCtrl.dispose();
     _amountGivenCtrl.dispose();
-    _searchCtrl.dispose(); // NEW: Dispose search controller
+    _searchCtrl.dispose(); 
     super.dispose();
   }
 
@@ -244,6 +244,7 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _showReceiptDialog(BuildContext context, List<SaleItem> items, double subtotal, double discountAmt, double finalTotal, String paymentMethod, double given, double change, String txnId, String cashierName) {
+    final provider = context.read<AppProvider>(); 
     final fmt = NumberFormat.currency(symbol: '₱');
     final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
 
@@ -262,10 +263,11 @@ class _SalesScreenState extends State<SalesScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Center(child: Text('GIYUMMY KOREAN SUPERMARKET', style: TextStyle(fontFamily: 'monospace', fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black))),
+                    Center(child: Text(provider.storeName.toUpperCase(), textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'monospace', fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black))),
                     const SizedBox(height: 8),
-                    const Center(child: Text('1972 Pedro Gil St, Santa Ana, Manila\n1009 Metro Manila\nTel.: +0908 888 6756', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: Colors.black))),
+                    Center(child: Text('${provider.storeAddress}\n${provider.storeContact.isNotEmpty ? "Contact: ${provider.storeContact}" : ""}', textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: Colors.black))),
                     const SizedBox(height: 12),
+                    
                     const _DashedLine(),
                     const SizedBox(height: 8),
                     Row(
@@ -432,9 +434,9 @@ class _SalesScreenState extends State<SalesScreen> {
                                                 child: Column(
                                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                                   children: [
-                                                    const Center(child: Text('GIYUMMY KOREAN SUPERMARKET', style: TextStyle(fontFamily: 'monospace', fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black))),
+                                                    Center(child: Text(provider.storeName.toUpperCase(), textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'monospace', fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black))),
                                                     const SizedBox(height: 8),
-                                                    const Center(child: Text('1972 Pedro Gil St, Santa Ana, Manila\n1009 Metro Manila\nTel.: +0908 888 6756', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: Colors.black))),
+                                                    Center(child: Text('${provider.storeAddress}\n${provider.storeContact.isNotEmpty ? "Contact: ${provider.storeContact}" : ""}', textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: Colors.black))),
                                                     const SizedBox(height: 12),
                                                     const _DashedLine(),
                                                     const SizedBox(height: 8),
@@ -462,24 +464,33 @@ class _SalesScreenState extends State<SalesScreen> {
                                                 ),
                                               ),
                                               const SizedBox(height: 16),
+                                              
+                                              // --- LOCAL FILE RENDERING FOR RECEIPTS ---
                                               if (sale.receiptImagePath != null) ...[
                                                 Text('Attached Receipt Image:', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
                                                 const SizedBox(height: 8),
-                                                Center(child: ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(sale.receiptImagePath!), height: 300, fit: BoxFit.contain))),
+                                                Center(
+                                                  child: File(sale.receiptImagePath!).existsSync() 
+                                                    ? ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(sale.receiptImagePath!), height: 300, fit: BoxFit.contain))
+                                                    : Container(height: 300, color: Colors.grey[200], child: const Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey)))
+                                                ),
                                                 const SizedBox(height: 16),
                                               ],
                                               Align(
                                                 alignment: Alignment.centerRight,
                                                 child: OutlinedButton.icon(
                                                   onPressed: () async {
-                                                      final result = await FilePicker.pickFiles(type: FileType.image);
+                                                    final result = await FilePicker.pickFiles(type: FileType.image);
                                                     if (result != null && result.files.single.path != null) {
+                                                      // Reverted to saving to local Document Directory
                                                       final appDir = await getApplicationDocumentsDirectory();
-                                                      final receiptsDir = Directory('${appDir.path}/receipts');
+                                                      final receiptsDir = Directory('${appDir.path}/product_management_data/receipts');
                                                       if (!await receiptsDir.exists()) await receiptsDir.create(recursive: true);
+                                                      
                                                       final ext = path.extension(result.files.single.path!);
                                                       final fileName = 'receipt_${sale.id}$ext';
                                                       final savedImage = await File(result.files.single.path!).copy('${receiptsDir.path}/$fileName');
+                                                      
                                                       await provider.attachReceiptToSale(sale.id, savedImage.path);
                                                     }
                                                   },
@@ -525,7 +536,6 @@ class _SalesScreenState extends State<SalesScreen> {
     
     final categories = ['All', ...products.map((p) => p.category).toSet()];
     
-    // --- NEW: Filter by both Category AND the Search Query ---
     final displayProducts = products.where((p) {
       final matchesCategory = _selectedCategory == 'All' || p.category == _selectedCategory;
       final matchesSearch = _searchQuery.isEmpty || 
@@ -773,7 +783,6 @@ class _SalesScreenState extends State<SalesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // --- NEW: Header with Search Bar and Category Chips ---
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -816,7 +825,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                   selectedColor: isDark ? Colors.blue[700] : Colors.blue[600],
                                   backgroundColor: isDark ? Colors.grey[900] : Colors.grey[100],
                                   side: BorderSide(color: isSelected ? Colors.transparent : borderColor),
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // slightly smaller padding
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), 
                                   onSelected: (_) => setState(() => _selectedCategory = cat),
                                 ),
                               );
@@ -860,6 +869,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                         child: Stack(
                                           fit: StackFit.expand,
                                           children: [
+                                            // --- RESTORED: Uses Local File Loading System ---
                                             p.imagePath != null && File(p.imagePath!).existsSync()
                                                 ? Image.file(File(p.imagePath!), fit: BoxFit.cover)
                                                 : Container(color: isDark ? Colors.grey[800] : Colors.grey[100], child: Icon(Icons.fastfood, size: 48, color: Colors.grey[400])),
@@ -980,7 +990,7 @@ class _DashedLine extends StatelessWidget {
 }
 
 // ============================================================================
-// NEW: CUSTOMER DISPLAY APP (The UI for the Second Monitor)
+// CUSTOMER DISPLAY APP (The UI for the Second Monitor)
 // ============================================================================
 class CustomerDisplayApp extends StatefulWidget {
   final int windowId;

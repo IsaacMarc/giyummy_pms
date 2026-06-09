@@ -50,6 +50,7 @@ class _Sidebar extends StatelessWidget {
         const _NavItem('reports', 'Reports', Icons.bar_chart_outlined),
         
       const _NavItem('alerts', 'Alerts', Icons.notifications_outlined),
+      
       // 2. Group Maintenance and Users together as Admin-only modules
       if (user?.role == 'Admin') ...[
         const _NavItem('maintenance', 'Maintenance', Icons.build_outlined),
@@ -57,6 +58,9 @@ class _Sidebar extends StatelessWidget {
       ],
 
       const _NavItem('profile', 'Profile', Icons.person_outline),
+      
+      const _NavItem('settings', 'Settings', Icons.settings_outlined), 
+      
       const _NavItem('help', 'Help', Icons.help_outline),
       const _NavItem('about', 'About', Icons.info_outline_rounded),
     ];
@@ -149,7 +153,6 @@ class _Sidebar extends StatelessWidget {
     );
   }
 }
-
 class _NavItem {
   final String page;
   final String label;

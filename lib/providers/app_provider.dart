@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // <--- ADDED
 import 'package:product_management/models/models.dart';
 import 'package:product_management/services/auth_service.dart';
 import 'package:product_management/services/storage_service.dart';
@@ -16,6 +17,19 @@ class AppProvider extends ChangeNotifier {
   bool isInitialized = false;
   Timer? _backgroundMonitor;
 
+  // ── SYSTEM SETTINGS CACHE ──────────────────────────────────────────────────
+  String _storeName = 'GiYummy Main Branch';
+  String _storeAddress = '';
+  String _storeContact = '';
+  double _taxRate = 12.0;
+  int _sessionTimeout = 15;
+
+  String get storeName => _storeName;
+  String get storeAddress => _storeAddress;
+  String get storeContact => _storeContact;
+  double get taxRate => _taxRate;
+  int get sessionTimeout => _sessionTimeout;
+
   // ── IN-MEMORY CACHES (Lightning fast UI reads) ─────────────────────────────
   List<User> _users = [];
   List<Product> _products = [];
@@ -29,7 +43,6 @@ class AppProvider extends ChangeNotifier {
   String get currentPage => _currentPage;
   bool get isLoggedIn => _currentUser != null;
 
-
   ThemeMode _themeMode = ThemeMode.light;
   ThemeMode get themeMode => _themeMode;
 
@@ -37,47 +50,55 @@ class AppProvider extends ChangeNotifier {
     _themeMode = _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
     notifyListeners();
   }
+
+  // --- NEW: SYSTEM SETTINGS LOADER ---
+  Future<void> loadSystemSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // 1. Set the Default Start Screen based on saved preference!
+    _currentPage = prefs.getString('defaultTab') ?? 'dashboard';
+    
+    // 2. Load the Store Details for Receipts & POs
+    _storeName = prefs.getString('storeName') ?? 'GiYummy Main Branch';
+    _storeAddress = prefs.getString('storeAddress') ?? '';
+    _storeContact = prefs.getString('storeContact') ?? '';
+    _taxRate = prefs.getDouble('taxRate') ?? 12.0;
+    _sessionTimeout = prefs.getInt('sessionTimeout') ?? 15;
+    
+    notifyListeners();
+  }
   
   Future<void> loadData() async {
-    // Your existing data fetching...
     _users = await _storage.getUsers();
     _products = await _storage.getProducts();
     _sales = await _storage.getSales();
     _batches = await _storage.getBatches();
-    // ---> ADD THIS MISSING LINE <---
     _auditLogs = await _storage.getAuditLogs(); 
     
     notifyListeners();
   }
 
-List<ProductBatch> getBatchesForProduct(String productId) {
+  List<ProductBatch> getBatchesForProduct(String productId) {
     return _batches.where((b) => b.productId == productId).toList();
-}
+  }
 
- Future<void> addBatchAndRestock(ProductBatch batch, Product product) async {
-    // 1. Save to Database (FIXED: Changed _dbService to _storage)
+  Future<void> addBatchAndRestock(ProductBatch batch, Product product) async {
     await _storage.insertBatch(batch);
-    
-    // 2. Add to local memory
     _batches.add(batch);
     
-    // 3. Update the Master Product automatically!
     product.stock += batch.quantity;
     product.updatedAt = DateTime.now().toIso8601String();
     if (product.status == 'Expired' || product.status == 'Out of Stock') {
       product.autoDispose = false; 
     }
     
-    // 4. Save product changes
     await updateProduct(product); 
     notifyListeners();
   }
 
   Future<void> updateBatchInfo(ProductBatch batch, Product product, int oldQuantity) async {
-    // 1. Save modified batch back to SQLite
     await _storage.insertBatch(batch); 
     
-    // 2. Adjust the master stock if the user corrected a typo in the quantity
     final stockDifference = batch.quantity - oldQuantity;
     if (stockDifference != 0) {
       product.stock += stockDifference;
@@ -88,6 +109,7 @@ List<ProductBatch> getBatchesForProduct(String productId) {
     
     notifyListeners();
   }
+
   // ── Navigation ──────────────────────────────────────────────────────────────
 
   void navigateTo(String page) {
@@ -97,19 +119,18 @@ List<ProductBatch> getBatchesForProduct(String productId) {
 
   // ── Auth & Startup ──────────────────────────────────────────────────────────
 
-Future<void> restoreSession() async {
-    // Load ALL SQLite data into RAM once at startup
+  Future<void> restoreSession() async {
     _currentUser = _storage.getCurrentUser();
     _users = await _storage.getUsers();
     _products = await _storage.getProducts();
-    
-    // Load the newly created SQLite tables!
     _auditLogs = await _storage.getAuditLogs();
     _backups = await _storage.getBackups();
-    
     _sales = await _storage.getSales(); 
     _alerts = await _storage.getAlerts(); 
     _batches = await _storage.getBatches();
+
+    // ---> LOAD SETTINGS HERE <---
+    await loadSystemSettings();
 
     isInitialized = true;
     notifyListeners();
@@ -121,7 +142,6 @@ Future<void> restoreSession() async {
   }
 
   Future<String?> login(String username, String password) async {
-    // 1. Verify credentials (safely catch if the user doesn't exist)
     User user;
     try {
       user = _users.firstWhere(
@@ -134,11 +154,12 @@ Future<void> restoreSession() async {
       return 'Invalid username or password';
     }
 
-    // 2. Database updates (If MySQL crashes here, it will accurately report it to the UI!)
     user.lastLogin = DateTime.now().toIso8601String();
     _currentUser = user;
-    _currentPage = 'dashboard';
     _storage.setCurrentUser(user);
+
+    // ---> LOAD SETTINGS HERE (Overwrites default 'dashboard' if changed) <---
+    await loadSystemSettings();
 
     await loadData();
     notifyListeners(); 
@@ -147,7 +168,7 @@ Future<void> restoreSession() async {
     await _addAuditLog('LOGIN', 'Auth', 'User logged in', user);
     await _generateStockAlerts();
     
-    return null; // Success!
+    return null; 
   }
 
   Future<String?> register(String username, String email, String password) async {
@@ -165,12 +186,16 @@ Future<void> restoreSession() async {
       department: 'General', 
       phone: '',
       isActive: true,
+      employeeId: '',
+      firstName: '',
+      middleInitial: '',
+      lastName: '',
     );
     
     _users.add(newUser);
-    notifyListeners(); // Optimistic update
+    notifyListeners(); 
     
-    await _storage.saveUser(newUser); // Save to DB
+    await _storage.saveUser(newUser); 
     return null;
   }
 
@@ -186,32 +211,30 @@ Future<void> restoreSession() async {
 
   // ── Products ─────────────────────────────────────────────────────────────────
 
-  List<Product> getProducts() => _products; // Instant synchronous read
+  List<Product> getProducts() => _products; 
 
   Future<void> addProduct(Product product) async {
       _products.add(product);
-      notifyListeners(); // Instant UI update
+      notifyListeners(); 
       
       await _storage.saveProduct(product);
       await _addAuditLog('CREATE', 'Inventory', 'Added product: ${product.name}');
       
-      // NEW: Instantly check for low stock or expiration when adding a new item
+      await _generateStockAlerts(); 
+  }
+
+  Future<void> updateProduct(Product updated) async {
+    final idx = _products.indexWhere((p) => p.id == updated.id);
+    if (idx >= 0) {
+      _products[idx] = updated;
+      notifyListeners(); 
+      
+      await _storage.saveProduct(updated);
+      await _addAuditLog('UPDATE', 'Inventory', 'Updated product: ${updated.name}');
+      
       await _generateStockAlerts(); 
     }
-
-    Future<void> updateProduct(Product updated) async {
-      final idx = _products.indexWhere((p) => p.id == updated.id);
-      if (idx >= 0) {
-        _products[idx] = updated;
-        notifyListeners(); 
-        
-        await _storage.saveProduct(updated);
-        await _addAuditLog('UPDATE', 'Inventory', 'Updated product: ${updated.name}');
-        
-        // NEW: Instantly update alerts if a manager manually changes the stock number or date
-        await _generateStockAlerts(); 
-      }
-    }
+  }
 
   Future<void> deleteProduct(String productId) async {
     final product = _products.firstWhere((p) => p.id == productId);
@@ -227,7 +250,6 @@ Future<void> restoreSession() async {
   List<Sale> getSales() => _sales;
 
   Future<String?> addSale(List<SaleItem> items, double discount, String paymentMethod) async {
-    // 1. Validate stock in memory
     for (final item in items) {
       final product = _products.firstWhere((p) => p.id == item.productId);
       if (product.stock < item.quantity) {
@@ -235,16 +257,13 @@ Future<void> restoreSession() async {
       }
     }
 
-    // 2. Deduct stock in memory
     for (final item in items) {
       final idx = _products.indexWhere((p) => p.id == item.productId);
       _products[idx].stock -= item.quantity;
       _products[idx].updatedAt = DateTime.now().toIso8601String();
-      // Background DB update
       _storage.saveProduct(_products[idx]); 
     }
 
-    // 3. Process Sale
     final total = items.fold(0.0, (sum, i) => sum + i.subtotal);
     final discountAmount = total * discount / 100;
     final finalTotal = total - discountAmount;
@@ -261,7 +280,7 @@ Future<void> restoreSession() async {
     );
 
     _sales.add(sale);
-    notifyListeners(); // UI updates instantly!
+    notifyListeners(); 
 
     await _storage.saveSale(sale); 
     await _addAuditLog('SALE', 'Sales', 'Sale completed: \$${finalTotal.toStringAsFixed(2)}');
@@ -270,14 +289,13 @@ Future<void> restoreSession() async {
     return null;
   }
 
-    // --- NEW: Attach Receipt Image to Sale ---
   Future<void> attachReceiptToSale(String saleId, String imagePath) async {
     final idx = _sales.indexWhere((s) => s.id == saleId);
     if (idx >= 0) {
       _sales[idx].receiptImagePath = imagePath;
-      notifyListeners(); // Instantly update the UI
+      notifyListeners(); 
       
-      await _storage.updateSale(_sales[idx]); // Save to SQLite
+      await _storage.updateSale(_sales[idx]); 
       await _addAuditLog('UPDATE', 'Sales', 'Attached receipt image to sale $saleId');
     }
   }
@@ -301,7 +319,7 @@ Future<void> restoreSession() async {
   Future<void> markAllAlertsRead() async {
     for (final a in _alerts) {
       a.read = true;
-      _storage.saveAlert(a); // Save iteratively to DB
+      _storage.saveAlert(a); 
     }
     notifyListeners();
   }
@@ -321,14 +339,13 @@ Future<void> restoreSession() async {
         for (var batch in activeBatches) {
           final expDate = DateTime.parse(batch.expirationDate);
           
-          // If expired AND autoDispose is turned on
           if (DateTime.now().isAfter(expDate) && p.autoDispose) {
             final dumpedAmount = batch.quantity;
-            p.stock -= dumpedAmount; // Deduct only this batch's stock
+            p.stock -= dumpedAmount; 
             if (p.stock < 0) p.stock = 0;
             
-            batch.quantity = 0; // Mark batch as empty so it doesn't trigger again
-            await _storage.insertBatch(batch); // Save updated batch
+            batch.quantity = 0; 
+            await _storage.insertBatch(batch); 
             
             p.updatedAt = DateTime.now().toIso8601String();
             await _storage.saveProduct(p);
@@ -341,20 +358,19 @@ Future<void> restoreSession() async {
     }
 
   Future<void> clearAllAlerts() async {
-    _alerts.clear(); // Empty the in-memory list
-    notifyListeners(); // Instantly update UI (removes the red badge!)
+    _alerts.clear(); 
+    notifyListeners(); 
     
-    await _storage.clearAllAlerts(); // Wipe from SQLite
+    await _storage.clearAllAlerts(); 
     await _addAuditLog('DELETE', 'Alerts', 'Cleared all system notifications');
   }
 
- Future<void> _generateStockAlerts() async {
+  Future<void> _generateStockAlerts() async {
     await _processExpirations();
 
     for (final product in _products) {
       Alert? newAlert;
       
-      // -- NEW: SMART BATCH EXPIRATION SCANNER --
       final activeBatches = getBatchesForProduct(product.id).where((b) => b.quantity > 0).toList();
       if (activeBatches.isNotEmpty) {
         activeBatches.sort((a, b) => DateTime.parse(a.expirationDate).compareTo(DateTime.parse(b.expirationDate)));
@@ -368,7 +384,6 @@ Future<void> restoreSession() async {
         }
       }
 
-      // -- STOCK ALERT LOGIC --
       if (newAlert == null) {
         if (product.stock == 0) {
           newAlert = Alert(id: _uuid.v4(), type: 'low-stock', severity: 'critical', message: 'OUT OF STOCK: ${product.name} has no stock remaining.', timestamp: DateTime.now().toIso8601String(), productId: product.id);
@@ -377,7 +392,6 @@ Future<void> restoreSession() async {
         }
       }
 
-      // -- SMART ALERT INJECTION --
       if (newAlert != null) {
         bool alreadyActive = _alerts.any((a) => 
             a.productId == product.id && 
@@ -418,7 +432,6 @@ Future<void> restoreSession() async {
     await _addAuditLog('DELETE', 'Users', 'Deleted user: ${user.username}');
   }
 
-  //Admin modify user
   Future<String?> adminAddUser(String username, String email, String password, String role, String department, String phone, String empId, String fName, String mi, String lName) async {
     if (_users.any((u) => u.username.toLowerCase() == username.toLowerCase())) {
       return 'Username already exists';
@@ -451,7 +464,6 @@ Future<void> restoreSession() async {
   Future<void> updateUser(User updated, {String? newPassword}) async {
       final idx = _users.indexWhere((u) => u.id == updated.id);
       if (idx >= 0) {
-        // NEW: If the admin typed a new password, hash it and apply it to the user object
         if (newPassword != null && newPassword.isNotEmpty) {
           updated.passwordHash = AuthService.hashPassword(newPassword);
         }
@@ -466,7 +478,7 @@ Future<void> restoreSession() async {
 
   // ── Profile ───────────────────────────────────────────────────────────────────
 
-Future<String?> updateProfile({
+  Future<String?> updateProfile({
     required String firstName,
     required String middleInitial,
     required String lastName,
@@ -494,11 +506,9 @@ Future<String?> updateProfile({
     return null;
   }
 
-  // ADD THIS MISSING METHOD HERE:
   Future<String?> changePassword(String current, String newPass) async {
     if (_currentUser == null) return 'Not logged in';
     
-    // Verify the current password
     if (!AuthService.verifyPassword(current, _currentUser!.passwordHash)) {
       return 'Current password is incorrect';
     }
@@ -506,24 +516,23 @@ Future<String?> updateProfile({
     final idx = _users.indexWhere((u) => u.id == _currentUser!.id);
     if (idx < 0) return 'User not found';
     
-    // Update the password hash in memory
     _users[idx].passwordHash = AuthService.hashPassword(newPass);
     _currentUser = _users[idx];
     
-    notifyListeners(); // Update UI
+    notifyListeners(); 
     
-    // Save to SQLite database in the background
     await _storage.saveUser(_users[idx]);
     _storage.setCurrentUser(_users[idx]);
     await _addAuditLog('UPDATE', 'Profile', 'Changed password');
     
     return null;
   }
+
   // ── Internal ─────────────────────────────────────────────────────────────────
 
   Future<void> logExportReport(String timeframe) async {
     await _addAuditLog('EXPORT', 'Reports', 'Generated Excel Report ($timeframe)');
-    notifyListeners(); // Instantly updates the UI if the Audit Log is open
+    notifyListeners(); 
   }
   
   Future<void> _addAuditLog(String action, String module, String details, [User? user]) async {
@@ -548,13 +557,10 @@ Future<String?> updateProfile({
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
     final filename = 'backup_$timestamp.json';
     
-    // 1. Await the data export
     final data = await _storage.exportAllData();
-    
-    // 2. Await saving the physical file
     await _storage.saveBackupFile(filename, data);
     
-    final encoded = jsonEncode(data); // Use jsonEncode to accurately measure size
+    final encoded = jsonEncode(data); 
     
     final backup = Backup(
       id: _uuid.v4(),
@@ -566,15 +572,13 @@ Future<String?> updateProfile({
     _backups.add(backup);
     notifyListeners();
     
-    // 3. Save the backup record to the SQLite database
     await _storage.saveBackupRecord(backup);
     await _addAuditLog('BACKUP', 'Maintenance', 'Created backup: $filename');
     
     return filename;
   }
 
-
-Future<String?> restoreBackup(String filename) async {
+  Future<String?> restoreBackup(String filename) async {
     try {
       await _storage.restoreFromBackupFile(filename);
       await restoreSession(); 
@@ -585,7 +589,7 @@ Future<String?> restoreBackup(String filename) async {
     }
   }
   
-Future<String?> restoreBackupFromPath(String filePath, String filename) async {
+  Future<String?> restoreBackupFromPath(String filePath, String filename) async {
     try {
       await _storage.restoreFromAbsolutePath(filePath);
       await restoreSession(); 
@@ -599,16 +603,14 @@ Future<String?> restoreBackupFromPath(String filePath, String filename) async {
   // ── Maintenance & Logs ────────────────────────────────────────────────────────
 
   List<AuditLog> getAuditLogs() {
-    // Sort so the newest logs are always at the top
     _auditLogs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    return _auditLogs.take(50).toList(); // Only show the latest 50 in the UI
+    return _auditLogs.take(50).toList(); 
   }
 
   List<Backup> getBackups() {
     _backups.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return _backups;
   }
-
 
   void refresh() => notifyListeners();
 }
