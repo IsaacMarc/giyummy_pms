@@ -5,6 +5,7 @@ services:
     image: mariadb:10.4
     container_name: giyummy_mysql
     restart: always
+    command: --wait_timeout=86400 --interactive_timeout=86400
     environment:
       MYSQL_ROOT_PASSWORD: root        # Your database password
       MYSQL_DATABASE: giyummy_db       # Docker will auto-create this database!

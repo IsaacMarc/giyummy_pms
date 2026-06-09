@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Run: flutter pub add shared_preferences
 import '../providers/app_provider.dart';
 import '../models/models.dart';
 
@@ -12,6 +13,7 @@ class DashboardScreen extends StatefulWidget {
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
+
 class _DashboardScreenState extends State<DashboardScreen> {
   // Customizable Goals
   double _dailyRevenueTarget = 5000.0;
@@ -25,6 +27,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _currentTime = DateTime.now();
+    _loadSavedGoals(); // Load goals from hard drive
+    
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() => _currentTime = DateTime.now());
@@ -36,6 +40,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  // --- PERSISTENCE LOGIC ---
+  Future<void> _loadSavedGoals() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _dailyRevenueTarget = prefs.getDouble('dailyRevGoal') ?? 5000.0;
+        _dailyProfitTarget = prefs.getDouble('dailyProfGoal') ?? 1500.0;
+      });
+    }
+  }
+
+  Future<void> _saveGoals(double rev, double prof) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('dailyRevGoal', rev);
+    await prefs.setDouble('dailyProfGoal', prof);
+    setState(() {
+      _dailyRevenueTarget = rev;
+      _dailyProfitTarget = prof;
+    });
   }
 
   // --- GOAL EDITING DIALOG ---
@@ -81,10 +106,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
-              setState(() {
-                _dailyRevenueTarget = double.tryParse(revCtrl.text) ?? 5000.0;
-                _dailyProfitTarget = double.tryParse(profCtrl.text) ?? 1500.0;
-              });
+              final newRev = double.tryParse(revCtrl.text) ?? 5000.0;
+              final newProf = double.tryParse(profCtrl.text) ?? 1500.0;
+              _saveGoals(newRev, newProf); // Save permanently
               Navigator.pop(ctx);
             },
             child: const Text('Save Targets'),
@@ -108,6 +132,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final allSales = provider.getSales();
     final allProducts = provider.getProducts();
 
+    final userRole = provider.currentUser?.role ?? 'Employee';
+    final canViewReports = userRole == 'Admin' || userRole == 'Super Admin' || userRole == 'Manager';
+    final canExportData = userRole == 'Admin' || userRole == 'Super Admin';
+
     // --- 1. DATA CRUNCHING ---
     final todaySales = allSales.where((s) {
       final d = DateTime.parse(s.timestamp);
@@ -120,20 +148,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final revProgress = (todayRevenue / _dailyRevenueTarget).clamp(0.0, 1.0);
     final profitProgress = (todayProfitEst / _dailyProfitTarget).clamp(0.0, 1.0);
-    final criticalAlerts = allProducts.where((p) => p.stock <= 0).toList();
+    final criticalAlerts = allProducts.where((p) => p.stock <= p.reorderLevel).toList(); // Changed to show low stock too
 
     final paymentMethods = <String, double>{};
     final topItemsMap = <String, int>{};
+    final categorySalesMap = <String, double>{};
 
     for (var s in todaySales) {
       paymentMethods[s.paymentMethod] = (paymentMethods[s.paymentMethod] ?? 0) + s.finalTotal;
       for (var item in s.items) {
+        // Track Top Items
         topItemsMap[item.productName] = (topItemsMap[item.productName] ?? 0) + item.quantity;
+        
+        // Track Category Sales
+        final productMatch = allProducts.where((p) => p.id == item.productId);
+        final categoryName = productMatch.isNotEmpty ? productMatch.first.category : 'General';
+        categorySalesMap[categoryName] = (categorySalesMap[categoryName] ?? 0) + item.subtotal;
       }
     }
 
     final sortedTopItems = topItemsMap.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    final topItemsToday = sortedTopItems.take(4).toList();
+    final topItemsToday = sortedTopItems.take(10).toList(); // Increased to Top 10
 
     return Scaffold(
       backgroundColor: bgColor, 
@@ -167,7 +202,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   Row(
                     children: [
-                      // GLOBAL DARK MODE TOGGLE
                       IconButton(
                         icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode, color: isDark ? Colors.amber : Colors.grey[700]),
                         onPressed: () => context.read<AppProvider>().toggleTheme(),
@@ -214,17 +248,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                                   children: [
+                                    // Everyone gets New Sale and Inventory
                                     _buildActionBtn('New Sale', Icons.shopping_cart_checkout, Colors.blue[600]!, 
                                       () => context.read<AppProvider>().navigateTo('sales')), 
                                       
                                     _buildActionBtn('View Inventory', Icons.add_box, Colors.indigo[600]!, 
                                       () => context.read<AppProvider>().navigateTo('inventory')), 
                                       
-                                    _buildActionBtn('View Report', Icons.analytics, Colors.purple[600]!, 
-                                      () => context.read<AppProvider>().navigateTo('reports')), 
+                                    // Only Managers and Admins get Reports
+                                    if (canViewReports)
+                                      _buildActionBtn('View Report', Icons.analytics, Colors.purple[600]!, 
+                                        () => context.read<AppProvider>().navigateTo('reports')), 
                                       
-                                    _buildActionBtn('Export Data', Icons.cloud_download, Colors.teal[600]!, 
-                                      () => context.read<AppProvider>().navigateTo('maintenance')), 
+                                    // Only Admins get Export Data
+                                    if (canExportData)
+                                      _buildActionBtn('Export Data', Icons.cloud_download, Colors.teal[600]!, 
+                                        () => context.read<AppProvider>().navigateTo('maintenance')), 
                                   ],
                                 )
                             ],
@@ -232,7 +271,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 24),
                         
-                        // 2. Transaction Log
+                        // 2. Dual Charts (Line & Bar side-by-side)
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: _interactableCard(
+                                height: 320, 
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.show_chart, color: Colors.blue[400], size: 20),
+                                        const SizedBox(width: 8),
+                                        Text('7-Day Trend (Revenue vs Profit)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 24),
+                                    Expanded(child: _buildDetailedTrendChart(allSales)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 24),
+                            Expanded(
+                              flex: 2,
+                              child: _interactableCard(
+                                height: 320, 
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.category, color: Colors.purple[400], size: 20),
+                                        const SizedBox(width: 8),
+                                        Text("Today's Category Sales", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 24),
+                                    Expanded(child: _buildCategoryBarChart(categorySalesMap)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        // 3. Transaction Log
                         _interactableCard(
                           height: 320, 
                           child: Column(
@@ -268,25 +355,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 24),
-
-                        // 3. Top Items Leaderboard
-                        _interactableCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.emoji_events, color: Colors.amber),
-                                  const SizedBox(width: 8),
-                                  Text("Today's Top Items", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
-                                ],
-                              ),
-                              Divider(height: 32, color: borderColor),
-                              _buildTopItemsList(topItemsToday),
-                            ],
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -297,8 +365,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     flex: 3,
                     child: Column(
                       children: [
-                        // 1. Smart Alerts
+                        // 1. Smart Alerts (NOW SCROLLABLE)
                         _interactableCard(
+                          height: 360, // Fixed height so it can scroll inside
                           customColor: criticalAlerts.isNotEmpty ? (isDark ? Colors.red[900]!.withOpacity(0.2) : const Color(0xFFFFF4F4)) : cardColor,
                           customBorder: criticalAlerts.isNotEmpty ? Colors.red[300]! : borderColor,
                           child: Column(
@@ -312,27 +381,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ],
                               ),
                               const SizedBox(height: 16),
-                              if (criticalAlerts.isEmpty)
-                                const Text('All systems nominal. Inventory levels are stable.', style: TextStyle(color: Colors.green))
-                              else
-                                ...criticalAlerts.take(3).map((p) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 8.0),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.circle, size: 8, color: Colors.red),
-                                      const SizedBox(width: 8),
-                                      Expanded(child: Text('${p.name} is out of stock.', style: TextStyle(color: isDark ? Colors.red[200] : Colors.red[800], fontWeight: FontWeight.w500))),
-                                    ],
-                                  ),
-                                )),
+                              Expanded(
+                                child: criticalAlerts.isEmpty
+                                    ? const Text('All systems nominal. Inventory levels are stable.', style: TextStyle(color: Colors.green))
+                                    : SingleChildScrollView(
+                                        child: Column(
+                                          children: criticalAlerts.map((p) => Padding(
+                                            padding: const EdgeInsets.only(bottom: 12.0),
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.circle, size: 8, color: Colors.red),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Text(
+                                                    p.stock <= 0 ? '${p.name} is OUT OF STOCK.' : '${p.name} is low on stock (${p.stock} left).', 
+                                                    style: TextStyle(color: isDark ? Colors.red[200] : Colors.red[800], fontWeight: FontWeight.w500)
+                                                  )
+                                                ),
+                                              ],
+                                            ),
+                                          )).toList(),
+                                        ),
+                                      ),
+                              ),
                             ],
                           ),
                         ),
                         const SizedBox(height: 24),
 
-                        // 2. Payment Method Donut Chart
+                        // 2. Top Items Leaderboard (NOW SCROLLABLE)
                         _interactableCard(
-                          height: 260, 
+                          height: 350,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.emoji_events, color: Colors.amber),
+                                  const SizedBox(width: 8),
+                                  Text("Today's Top 10 Items", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
+                                ],
+                              ),
+                              Divider(height: 32, color: borderColor),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  child: _buildTopItemsList(topItemsToday)
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // 3. Payment Method Donut Chart
+                        _interactableCard(
+                          height: 220, 
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -342,20 +445,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 24),
-
-                        // 3. ENHANCED Revenue Trend Line Chart
-                        _interactableCard(
-                          height: 280, 
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('7-Day Revenue Trend', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
-                              const SizedBox(height: 24),
-                              Expanded(child: _buildDetailedTrendChart(allSales)),
-                            ],
-                          ),
-                        )
                       ],
                     ),
                   )
@@ -500,7 +589,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(item.key, style: TextStyle(fontWeight: FontWeight.w600, color: textColor)),
+                  Expanded(child: Text(item.key, style: TextStyle(fontWeight: FontWeight.w600, color: textColor), overflow: TextOverflow.ellipsis)),
                   Text('${item.value} units', style: TextStyle(color: subTextColor, fontWeight: FontWeight.bold)),
                 ],
               ),
@@ -566,7 +655,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildDetailedTrendChart(List<Sale> allSales) {
-    List<FlSpot> spots = [];
+    List<FlSpot> revSpots = [];
+    List<FlSpot> profSpots = [];
     double maxTotal = 0;
 
     for (int i = 6; i >= 0; i--) {
@@ -575,9 +665,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final d = DateTime.parse(s.timestamp);
         return d.year == date.year && d.month == date.month && d.day == date.day;
       }).toList();
-      final total = daySales.fold(0.0, (sum, s) => sum + s.finalTotal);
-      if (total > maxTotal) maxTotal = total;
-      spots.add(FlSpot((6 - i).toDouble(), total));
+      
+      final rev = daySales.fold(0.0, (sum, s) => sum + s.finalTotal);
+      final prof = rev * 0.30; // Estimated 30% profit
+
+      if (rev > maxTotal) maxTotal = rev;
+      
+      revSpots.add(FlSpot((6 - i).toDouble(), rev));
+      profSpots.add(FlSpot((6 - i).toDouble(), prof));
     }
 
     return LineChart(
@@ -589,12 +684,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 40,
+              reservedSize: 60, // INCREASED FROM 40 TO PREVENT CLIPPING
               getTitlesWidget: (value, meta) {
                 if (value == 0) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(right: 8.0),
-                  child: Text(value >= 1000 ? '${(value/1000).toStringAsFixed(1)}k' : value.toStringAsFixed(0), style: TextStyle(color: subTextColor, fontSize: 10), textAlign: TextAlign.right),
+                  child: Text(value >= 1000 ? '${(value/1000).toStringAsFixed(1)}k' : value.toStringAsFixed(0), style: TextStyle(color: subTextColor, fontSize: 11, fontWeight: FontWeight.bold), textAlign: TextAlign.right),
                 );
               }
             )
@@ -604,7 +699,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               showTitles: true,
               getTitlesWidget: (value, meta) {
                 final date = _currentTime.subtract(Duration(days: 6 - value.toInt()));
-                final dayName = DateFormat('EEE').format(date); // Mon, Tue, Wed...
+                final dayName = DateFormat('EEE').format(date); 
                 return Padding(
                   padding: const EdgeInsets.only(top: 8.0),
                   child: Text(dayName, style: TextStyle(color: subTextColor, fontSize: 11)),
@@ -617,24 +712,106 @@ class _DashboardScreenState extends State<DashboardScreen> {
         lineTouchData: LineTouchData(
           enabled: true,
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (spot) => isDark ? Colors.white : Colors.blueGrey[800]!,
+            getTooltipColor: (spot) => isDark ? Colors.grey[800]! : Colors.white,
             getTooltipItems: (touchedSpots) {
-              return touchedSpots.map((spot) => LineTooltipItem('₱${spot.y.toStringAsFixed(2)}', TextStyle(color: isDark ? Colors.black : Colors.white, fontWeight: FontWeight.bold))).toList();
+              return touchedSpots.map((spot) => LineTooltipItem('₱${spot.y.toStringAsFixed(0)}', TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold))).toList();
             }
           )
         ),
         maxY: maxTotal == 0 ? 1000 : maxTotal * 1.2, 
         lineBarsData: [
+          // Revenue Line
           LineChartBarData(
-            spots: spots,
+            spots: revSpots,
             isCurved: true,
             color: Colors.blue[600],
-            barWidth: 4,
+            barWidth: 3,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: true), 
             belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.1)),
           ),
+          // Profit Line (NEW)
+          LineChartBarData(
+            spots: profSpots,
+            isCurved: true,
+            color: Colors.green[500],
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: true), 
+            belowBarData: BarAreaData(show: true, color: Colors.green.withOpacity(0.1)),
+          ),
         ],
+      ),
+    );
+  }
+
+  // --- NEW CHART: SALES BY CATEGORY ---
+  Widget _buildCategoryBarChart(Map<String, double> categorySalesMap) {
+    if (categorySalesMap.isEmpty) {
+      return Center(child: Text('No sales data to categorize today.', style: TextStyle(color: subTextColor)));
+    }
+
+    final sortedEntries = categorySalesMap.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final topCategories = sortedEntries.take(5).toList(); // Show top 5 categories
+    
+    double maxVal = 0;
+    for (var e in topCategories) {
+      if (e.value > maxVal) maxVal = e.value;
+    }
+
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: maxVal == 0 ? 1000 : maxVal * 1.2,
+        barTouchData: BarTouchData(
+          enabled: true,
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (_) => isDark ? Colors.grey[800]! : Colors.white,
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              return BarTooltipItem('₱${rod.toY.toStringAsFixed(0)}', TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold));
+            },
+          ),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (double value, TitleMeta meta) { 
+                if (value.toInt() >= topCategories.length) return const SizedBox.shrink();
+                String category = topCategories[value.toInt()].key;
+                
+                // Abbreviate long category names to prevent overlapping
+                if(category.length > 8) category = '${category.substring(0, 6)}..';
+                
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(category, style: TextStyle(color: subTextColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                );
+              },
+            ),
+          ),
+          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        gridData: const FlGridData(show: false),
+        borderData: FlBorderData(show: false),
+        barGroups: topCategories.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final val = entry.value.value;
+          return BarChartGroupData(
+            x: idx,
+            barRods: [
+              BarChartRodData(
+                toY: val,
+                color: Colors.purple[400],
+                width: 16,
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(4), topRight: Radius.circular(4)),
+              ),
+            ],
+          );
+        }).toList(),
       ),
     );
   }

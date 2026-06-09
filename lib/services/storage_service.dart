@@ -5,8 +5,6 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:mysql1/mysql1.dart';
 
-
-
 class StorageService {
   static final StorageService instance = StorageService._internal();
   StorageService._internal();
@@ -32,12 +30,6 @@ class StorageService {
   }
 
   Future<MySqlConnection> get database async {
-    if (_db != null) return _db!;
-    _db = await _initDB();
-    return _db!;
-  }
-
-  Future<MySqlConnection> _initDB() async {
     final settings = ConnectionSettings(
       host: _host,
       port: _port,
@@ -46,9 +38,23 @@ class StorageService {
       db: _dbName,
     );
 
-    final conn = await MySqlConnection.connect(settings);
-    await _createTables(conn);
-    return conn;
+    // If we have never connected, build the first connection
+    if (_db == null) {
+      _db = await MySqlConnection.connect(settings);
+      await _createTables(_db!); // Ensure tables exist on first connect
+      return _db!;
+    }
+
+    // If we ARE connected, ping the database to see if it hung up on us
+    try {
+      await _db!.query('SELECT 1'); // A tiny, lightweight check
+      return _db!; // It replied! Safe to use.
+    } catch (e) {
+      // 3. The socket was closed! Reconnect silently.
+      print("⚡ Socket closed by idle timeout. Reconnecting...");
+      _db = await MySqlConnection.connect(settings);
+      return _db!;
+    }
   }
 
   // ─── MySQL Helper Methods ─────────────────────────────────────────
@@ -71,17 +77,17 @@ class StorageService {
     final keys = data.keys.toList();
     final values = data.values.map((v) => v is bool ? (v ? 1 : 0) : v).toList();
     
-    // THE FIX: Wrap every column name in backticks!
+    // Wrap every column name in backticks!
     final cols = keys.map((k) => '`$k`').join(', '); 
     final placeholders = List.filled(keys.length, '?').join(', ');
     
     await db.query('REPLACE INTO $table ($cols) VALUES ($placeholders)', values);
-  }
+  } 
 
   // ─── Table Creation ───────────────────────────────────────────────
 
-Future<void> _createTables(MySqlConnection conn) async {
-    // 1. Users
+  Future<void> _createTables(MySqlConnection conn) async {
+    // Users
     await conn.query('''
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(36) PRIMARY KEY,
@@ -102,7 +108,7 @@ Future<void> _createTables(MySqlConnection conn) async {
       )
     ''');
 
-    // 2. Products
+    // Products
     await conn.query('''
       CREATE TABLE IF NOT EXISTS products (
         id VARCHAR(36) PRIMARY KEY,
@@ -122,7 +128,7 @@ Future<void> _createTables(MySqlConnection conn) async {
       )
     ''');
 
-    // 3. Sales
+    // Sales
     await conn.query('''
       CREATE TABLE IF NOT EXISTS sales (
         id VARCHAR(36) PRIMARY KEY,
@@ -138,7 +144,7 @@ Future<void> _createTables(MySqlConnection conn) async {
       )
     ''');
 
-    // 4. Batches
+    // Batches
     await conn.query('''
       CREATE TABLE IF NOT EXISTS batches(
         id VARCHAR(36) PRIMARY KEY,
@@ -151,7 +157,7 @@ Future<void> _createTables(MySqlConnection conn) async {
       )
     ''');
 
-    // 5. Alerts
+    // Alerts
     await conn.query('''
       CREATE TABLE IF NOT EXISTS alerts(
         id VARCHAR(36) PRIMARY KEY,
@@ -164,7 +170,7 @@ Future<void> _createTables(MySqlConnection conn) async {
       )
     ''');
 
-    // 6. Audit Logs
+    // Audit Logs
     await conn.query('''
       CREATE TABLE IF NOT EXISTS audit_logs(
         id VARCHAR(36) PRIMARY KEY,
@@ -177,7 +183,7 @@ Future<void> _createTables(MySqlConnection conn) async {
       )
     ''');
 
-    // 7. Backups
+    // Backups
     await conn.query('''
       CREATE TABLE IF NOT EXISTS backups(
         id VARCHAR(36) PRIMARY KEY,
@@ -375,7 +381,7 @@ Future<void> _createTables(MySqlConnection conn) async {
 
     final keys = map.keys.where((k) => k != 'id').toList();
     
-    // THE FIX: Wrap every column name in backticks!
+    // Wrap every column name in backticks!
     final updates = keys.map((k) => '`$k` = ?').join(', '); 
     final values = keys.map((k) => map[k]).toList();
     values.add(sale.id); 

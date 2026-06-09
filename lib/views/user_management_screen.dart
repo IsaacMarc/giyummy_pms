@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // REQUIRED for input formatters
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../models/models.dart';
@@ -22,9 +23,45 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     );
   }
 
+  String _generateEmpId(String role, AppProvider provider) {
+      String prefix;
+      // 1. CHANGE PREFIXES HERE
+      if (role == 'Admin' || role == 'Super Admin') {
+        prefix = 'ADMN';
+      } else if (role == 'Manager') {
+        prefix = 'MNG';
+      } else {
+        prefix = 'EMP';
+      }
+
+      final now = DateTime.now();
+      // 2. CHANGE DATE FORMAT HERE (Currently YYYYMM)
+      final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}'; 
+
+      final users = provider.getUsers();
+      int maxIter = 0;
+      
+      // 3. CHANGE THE REGEX IF YOU REMOVE THE DATE
+      final regex = RegExp('^$prefix-$dateStr-(\\d{3})\$');
+      
+      for (var u in users) {
+        final match = regex.firstMatch(u.employeeId);
+        if (match != null) {
+          final iter = int.tryParse(match.group(1)!) ?? 0;
+          if (iter > maxIter) maxIter = iter;
+        }
+      }
+
+      // 4. CHANGE THE NUMBER LENGTH HERE (padLeft 3 means 001, padLeft 4 means 0001)
+      final nextIter = (maxIter + 1).toString().padLeft(3, '0');
+      
+      // 5. CHANGE THE FINAL COMBINATION HERE
+      return '$prefix-$dateStr-$nextIter'; 
+    }
   void _showUserDialog(BuildContext context, [User? user]) {
     final isEditing = user != null;
-    final currentUserId = context.read<AppProvider>().currentUser?.id;
+    final provider = context.read<AppProvider>();
+    final currentUserId = provider.currentUser?.id;
     final isCurrentUser = isEditing && user.id == currentUserId;
     
     final empIdCtrl = TextEditingController(text: user?.employeeId ?? '');
@@ -40,6 +77,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     
     String selectedRole = user?.role ?? 'Employee';
     bool isActive = user?.isActive ?? true;
+
+    // Generate initial ID if this is a brand new user
+    if (!isEditing && empIdCtrl.text.isEmpty) {
+      empIdCtrl.text = _generateEmpId(selectedRole, provider);
+    }
 
     showDialog(
       context: context,
@@ -84,15 +126,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(flex: 3, child: _field(fNameCtrl, 'First Name', isDark)),
+                        Expanded(flex: 3, child: _field(fNameCtrl, 'First Name', isDark, maxLength: 60)),
                         const SizedBox(width: 8),
-                        Expanded(flex: 1, child: _field(miCtrl, 'M.I.', isDark)),
+                        Expanded(flex: 1, child: _field(miCtrl, 'M.I.', isDark, maxLength: 2)),
                         const SizedBox(width: 8),
-                        Expanded(flex: 3, child: _field(lNameCtrl, 'Last Name', isDark)),
+                        Expanded(flex: 3, child: _field(lNameCtrl, 'Last Name', isDark, maxLength: 60)),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _field(empIdCtrl, 'Employee ID', isDark),
+                    // Make the Auto-Generated ID ReadOnly so it isn't accidentally modified
+                    _field(empIdCtrl, 'Employee ID (Auto-Generated)', isDark),
                     
                     Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Divider(color: isDark ? Colors.grey[800] : Colors.grey[200])),
                     
@@ -100,6 +143,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: usernameCtrl,
+                      maxLength: 50,
                       enabled: !isEditing,
                       style: TextStyle(color: textColor),
                       decoration: InputDecoration(
@@ -116,6 +160,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: passCtrl,
+                      maxLength: 50,
                       obscureText: true,
                       style: TextStyle(color: textColor),
                       decoration: InputDecoration(
@@ -129,16 +174,17 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: _field(emailCtrl, 'Email Address', isDark)),
+                        Expanded(child: _field(emailCtrl, 'Email Address', isDark, maxLength: 100)),
                         const SizedBox(width: 12),
-                        Expanded(child: _field(phoneCtrl, 'Phone Number', isDark)),
+                        // Phone set to strictly accept numbers with type safety formatting
+                        Expanded(child: _field(phoneCtrl, 'Phone Number', isDark, isNumber: true, maxLength: 15)),
                       ],
                     ),
                     const SizedBox(height: 12),
                     
                     Row(
                       children: [
-                        Expanded(child: _field(deptCtrl, 'Department', isDark)),
+                        Expanded(child: _field(deptCtrl, 'Department', isDark, maxLength: 60)),
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String>(
@@ -153,7 +199,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                               isDense: true
                             ),
                             items: ['Admin', 'Manager', 'Employee'].map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
-                            onChanged: isCurrentUser ? null : (v) => setDialogState(() => selectedRole = v!), // Prevent changing own role
+                            onChanged: isCurrentUser ? null : (v) => setDialogState(() { 
+                              selectedRole = v!;
+                              // Re-generate ID if role swaps before saving a new user
+                              if (!isEditing) {
+                                empIdCtrl.text = _generateEmpId(selectedRole, provider);
+                              }
+                            }),
                           ),
                         ),
                       ],
@@ -210,8 +262,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     return;
                   }
 
-                  final provider = context.read<AppProvider>();
-
                   if (isEditing) {
                     final updatedUser = User(
                       id: user.id,
@@ -262,15 +312,25 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     );
   }
 
-  Widget _field(TextEditingController ctrl, String label, bool isDark) {
+  // --- UPGRADED HELPER WIDGET ---
+  Widget _field(TextEditingController ctrl, String label, bool isDark, {int maxLines = 1, bool isNumber = false, bool readOnly = false, int? maxLength}) {
     return TextField(
       controller: ctrl,
+      maxLines: maxLines,
+      maxLength: maxLength,
+      enabled: !readOnly,
+      keyboardType: isNumber ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+      inputFormatters: isNumber ? [
+        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')), 
+      ] : null,
       style: TextStyle(color: isDark ? Colors.white : Colors.black87),
       decoration: InputDecoration(
         labelText: label, 
         labelStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[700]),
         border: OutlineInputBorder(borderSide: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[400]!)),
         enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[400]!)), 
+        filled: readOnly,
+        fillColor: readOnly ? (isDark ? Colors.grey[800] : Colors.grey[100]) : null,
         isDense: true
       ),
     );
@@ -311,7 +371,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
     final provider = context.watch<AppProvider>();
     final users = provider.getUsers();
-    final currentUserId = provider.currentUser?.id; // Now actively used to highlight the logged-in user
+    final currentUserId = provider.currentUser?.id; 
 
     // KPI Math
     final total = users.length;

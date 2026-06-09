@@ -1051,7 +1051,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _field(nameCtrl, 'Product Name', readOnly: isReadOnly),
+                  _field(nameCtrl, 'Product Name', readOnly: isReadOnly, maxLength: 60),
                   const SizedBox(height: 12),
                   isReadOnly
                       ? _field(TextEditingController(text: selectedCategory), 'Category', readOnly: true)
@@ -1090,7 +1090,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _field(descCtrl, 'Description', maxLines: 2, readOnly: isReadOnly),
+                  _field(descCtrl, 'Description', maxLines: 2, readOnly: isReadOnly, maxLength: 250),
                 ],
               ),
             ),
@@ -1211,21 +1211,26 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  Widget _field(TextEditingController ctrl, String label, {int maxLines = 1, bool isNumber = false, bool readOnly = false}) {
+  Widget _field(TextEditingController ctrl, String label, {int maxLines = 1, bool isNumber = false, bool readOnly = false, int? maxLength}) {
       final isDark = Theme.of(context).brightness == Brightness.dark;
 
       return TextField(
         controller: ctrl, 
         maxLines: maxLines, 
+        maxLength: maxLength, 
         enabled: !readOnly,
         keyboardType: isNumber ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
-        inputFormatters: isNumber ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))] : null,
+        inputFormatters: isNumber ? [
+          // STRICTER REGEX: Only allows standard numbers and a single decimal point
+          FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')), 
+        ] : null,
         decoration: InputDecoration(
           labelText: label, 
           border: const OutlineInputBorder(), 
           isDense: true, 
           filled: readOnly, 
-          fillColor: readOnly ? (isDark ? Colors.grey[800] : Colors.grey[100]) : null
+          fillColor: readOnly ? (isDark ? Colors.grey[800] : Colors.grey[100]) : null,
+          
         ),
       );
     }
