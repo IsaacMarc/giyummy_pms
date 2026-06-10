@@ -97,7 +97,7 @@ class StorageService {
         lastName VARCHAR(100) DEFAULT '',
         username VARCHAR(255) NOT NULL,
         email VARCHAR(255) DEFAULT '',
-        phone VARCHAR(50) DEFAULT '',         /* ADDED */
+        phone VARCHAR(50) DEFAULT '',         
         passwordHash VARCHAR(255) NOT NULL,
         role VARCHAR(50) NOT NULL,
         name VARCHAR(255) DEFAULT '',
@@ -133,13 +133,13 @@ class StorageService {
       CREATE TABLE IF NOT EXISTS sales (
         id VARCHAR(36) PRIMARY KEY,
         items TEXT,
-        total DECIMAL(10, 2),                 /* FIXED */
+        total DECIMAL(10, 2),              
         discount DECIMAL(10, 2),
         finalTotal DECIMAL(10, 2),
         paymentMethod VARCHAR(50),
         cashierName VARCHAR(255),
         timestamp VARCHAR(100),
-        status VARCHAR(50),                   /* ADDED */
+        status VARCHAR(50),                   
         receiptImagePath TEXT
       )
     ''');
@@ -161,11 +161,11 @@ class StorageService {
     await conn.query('''
       CREATE TABLE IF NOT EXISTS alerts(
         id VARCHAR(36) PRIMARY KEY,
-        type VARCHAR(100),                    /* FIXED */
-        severity VARCHAR(50),                 /* ADDED */
+        type VARCHAR(100),                   
+        severity VARCHAR(50),                
         message TEXT,
         timestamp VARCHAR(100),
-        productId VARCHAR(36),                /* ADDED */
+        productId VARCHAR(36),                
         `read` TINYINT DEFAULT 0
       )
     ''');
@@ -175,10 +175,9 @@ class StorageService {
       CREATE TABLE IF NOT EXISTS audit_logs(
         id VARCHAR(36) PRIMARY KEY,
         userId VARCHAR(36),
-        username VARCHAR(255),                /* FIXED (lowercase n) */
+        username VARCHAR(255),              
         action VARCHAR(255),
-        module VARCHAR(100),                  /* ADDED */
-        details TEXT,
+        module VARCHAR(100),                
         timestamp VARCHAR(100)
       )
     ''');
@@ -188,9 +187,9 @@ class StorageService {
       CREATE TABLE IF NOT EXISTS backups(
         id VARCHAR(36) PRIMARY KEY,
         filename VARCHAR(255),
-        size INT,                             /* FIXED */
+        size INT,                           
         timestamp VARCHAR(100),
-        type VARCHAR(100)                     /* ADDED */
+        type VARCHAR(100)                    
       )
     ''');
   }

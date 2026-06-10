@@ -19,7 +19,7 @@ class InventoryScreen extends StatefulWidget {
 }
 
 class _InventoryScreenState extends State<InventoryScreen> {
-  final _searchCtrl = TextEditingController();
+  final _searchCtrl = TextEditingController();  
   String _categoryFilter = 'All';
   static const _uuid = Uuid();
 
@@ -160,7 +160,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  // --- NEW: Tab Builder for Active vs Archived ---
+  // Tab Builder for Active vs Archived ---
   Widget _buildTabCard(int index, String title, String subtitle, IconData icon, bool isDark) {
     final isSelected = _selectedTab == index;
     return Expanded(
