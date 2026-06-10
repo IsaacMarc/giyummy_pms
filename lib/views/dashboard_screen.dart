@@ -260,9 +260,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       _buildActionBtn('View Report', Icons.analytics, Colors.purple[600]!, 
                                         () => context.read<AppProvider>().navigateTo('reports')), 
                                       
-                                    // Only Admins get Export Data
                                     if (canExportData)
-                                      _buildActionBtn('Export Data', Icons.cloud_download, Colors.teal[600]!, 
+                                      _buildActionBtn('Backup Data', Icons.cloud_download, Colors.teal[600]!, 
                                         () => context.read<AppProvider>().navigateTo('maintenance')), 
                                   ],
                                 )
