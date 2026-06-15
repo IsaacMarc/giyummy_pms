@@ -220,8 +220,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final now = DateTime.now();
     final reportTimestamp = DateFormat('MMM d, yyyy - hh:mm a').format(now);
     
-    final themeGreen = const PdfColor.fromInt(0xFF0A7A5F);
-    final darkCharcoal = const PdfColor.fromInt(0xFF2C3E50);
+    const themeGreen = PdfColor.fromInt(0xFF0A7A5F);
+    const darkCharcoal = PdfColor.fromInt(0xFF2C3E50);
 
 if (_selectedTab == 0) {
       // ---------------------------------------------------------

@@ -34,6 +34,49 @@ class AppShell extends StatelessWidget {
 class _Sidebar extends StatelessWidget {
   const _Sidebar();
 
+  // Helper method to show a modern, themed confirmation dialog
+  void _showLogoutConfirmation(BuildContext context, AppProvider provider) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+          title: Text(
+            'Confirm Logout',
+            style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1A1F36)),
+          ),
+          content: Text(
+            'Are you sure you want to log out of the GiYummy system terminal?',
+            style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx), // Close dialog, do nothing
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx); // Close dialog
+                provider.logout();  // Process session termination
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[700],
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              ),
+              child: const Text('Logout', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
@@ -130,7 +173,7 @@ class _Sidebar extends StatelessWidget {
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(8),
-                onTap: () => provider.logout(),
+                onTap: () => _showLogoutConfirmation(context, provider), // FIXED: Triggers confirmation instead of direct exit
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
