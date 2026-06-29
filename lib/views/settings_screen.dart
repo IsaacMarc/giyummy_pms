@@ -314,7 +314,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             subtitle: Text('Switch between Light and Dark mode interfaces.', style: TextStyle(color: subTextColor, fontSize: 12)),
                             trailing: Switch(
                               value: isDark,
-                              activeColor: Colors.blue[400],
+                              activeThumbColor: Colors.blue[400],
                               onChanged: (val) {
                                 context.read<AppProvider>().toggleTheme();
                               },
@@ -327,7 +327,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             Text('Default Start Screen', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                             const SizedBox(height: 8),
                             DropdownButtonFormField<String>(
-                              value: _defaultTab,
+                              initialValue: _defaultTab,
                               dropdownColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
                               style: TextStyle(color: textColor),
                               decoration: InputDecoration(

@@ -438,7 +438,7 @@ if (_selectedTab == 0) {
                 headers: [breakdownHeader, 'Products Sold', 'Sales Revenue', 'Period Goals', 'Variance'],
                 data: breakdownRows,
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 9),
-                headerDecoration: pw.BoxDecoration(color: darkCharcoal),
+                headerDecoration: const pw.BoxDecoration(color: darkCharcoal),
                 oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF9FAFB)),
                 rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
                 cellStyle: const pw.TextStyle(fontSize: 9),
@@ -475,7 +475,7 @@ if (_selectedTab == 0) {
                           headers: ['Category', 'Revenue', 'Units'],
                           data: catData.entries.map((e) => [e.key, fmt.format(e.value['rev']), e.value['units'].toString()]).toList(),
                           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8),
-                          headerDecoration: pw.BoxDecoration(color: themeGreen),
+                          headerDecoration: const pw.BoxDecoration(color: themeGreen),
                           oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF9FAFB)),
                           rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
                           cellStyle: const pw.TextStyle(fontSize: 8.5),
@@ -500,7 +500,7 @@ if (_selectedTab == 0) {
                             return [e.key, fmt.format(e.value), '${contributionPct.toStringAsFixed(1)}%'];
                           }).toList(),
                           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8),
-                          headerDecoration: pw.BoxDecoration(color: themeGreen),
+                          headerDecoration: const pw.BoxDecoration(color: themeGreen),
                           oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF9FAFB)),
                           rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
                           cellStyle: const pw.TextStyle(fontSize: 8.5),
@@ -635,7 +635,7 @@ if (_selectedTab == 0) {
                             fmt.format(e.value)
                           ]).toList(),
                           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8),
-                          headerDecoration: pw.BoxDecoration(color: darkCharcoal),
+                          headerDecoration: const pw.BoxDecoration(color: darkCharcoal),
                           oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF9FAFB)),
                           rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
                           cellStyle: const pw.TextStyle(fontSize: 8),
@@ -665,7 +665,7 @@ if (_selectedTab == 0) {
                               ? [['No items sold today', '0']]
                               : topItems.map((e) => [e.key, e.value.toString()]).toList(),
                           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8),
-                          headerDecoration: pw.BoxDecoration(color: themeGreen),
+                          headerDecoration: const pw.BoxDecoration(color: themeGreen),
                           oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF9FAFB)),
                           rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
                           cellStyle: const pw.TextStyle(fontSize: 8),
@@ -689,7 +689,7 @@ if (_selectedTab == 0) {
                               ? [['No stagnant stock detected', '-', '-']]
                               : deadStock.take(5).map((p) => [p.name, p.stock.toString(), fmt.format(p.stock * p.price)]).toList(),
                           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8),
-                          headerDecoration: pw.BoxDecoration(color: themeGreen),
+                          headerDecoration: const pw.BoxDecoration(color: themeGreen),
                           oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF9FAFB)),
                           rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
                           cellStyle: const pw.TextStyle(fontSize: 8),
@@ -721,7 +721,7 @@ if (_selectedTab == 0) {
                                   return [p.name, isExpired ? 'EXPIRED' : 'Expiring Soon', p.stock.toString()];
                                 }).toList(),
                           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8),
-                          headerDecoration: pw.BoxDecoration(color: darkCharcoal),
+                          headerDecoration: const pw.BoxDecoration(color: darkCharcoal),
                           oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF9FAFB)),
                           rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
                           cellStyle: const pw.TextStyle(fontSize: 8),
@@ -749,7 +749,7 @@ if (_selectedTab == 0) {
                                   return [p.name, p.stock == 0 ? 'OUT' : p.stock.toString(), suggestedOrder.toString()];
                                 }).toList(),
                           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8),
-                          headerDecoration: pw.BoxDecoration(color: darkCharcoal),
+                          headerDecoration: const pw.BoxDecoration(color: darkCharcoal),
                           oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF9FAFB)),
                           rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
                           cellStyle: const pw.TextStyle(fontSize: 8),

@@ -705,7 +705,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  void _showBatchesDialog(BuildContext ctx, Product product) {
+void _showBatchesDialog(BuildContext ctx, Product product) {
     final isDark = Theme.of(ctx).brightness == Brightness.dark;
     final provider = ctx.read<AppProvider>();
     final fmt = NumberFormat.currency(symbol: '₱');
@@ -714,7 +714,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
       context: ctx,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (_, setDialogState) {
+          // ─── FIFO SKU HANDLING STRATEGY ──────────────────────────────────
+          // Pull raw database batch lines mapped to this master record
           final batches = provider.getBatchesForProduct(product.id);
+          
+          // Sort batches strictly chronologically (Oldest stock / Next to expire first)
+          // This enforces your operational requirement to finish current units before ordering new ones
+          batches.sort((a, b) => DateTime.parse(a.expirationDate).compareTo(DateTime.parse(b.expirationDate)));
           
           return AlertDialog(
             title: Row(
@@ -725,18 +731,24 @@ class _InventoryScreenState extends State<InventoryScreen> {
               ],
             ),
             content: SizedBox(
-              width: 700,
-              height: 400,
+              width: 750, // Slightly expanded width for strategy badges
+              height: 420,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Active Inventory Batches', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.bold)),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Active SKU Batches (FIFO Priority Order)', style: TextStyle(color: isDark ? Colors.white : Colors.grey[800], fontWeight: FontWeight.bold, fontSize: 14)),
+                          const SizedBox(height: 2),
+                          Text('Clear higher priority stock blocks before requesting restocks.', style: TextStyle(color: Colors.grey[500], fontSize: 11)),
+                        ],
+                      ),
                       ElevatedButton.icon(
                         onPressed: () async {
-                          // Open Add Batch / Restock Dialog
                           await _showAddBatchDialog(dialogCtx, product, provider);
                           setDialogState(() {}); // Refresh batches view
                           setState(() {}); // Refresh main table
@@ -757,23 +769,56 @@ class _InventoryScreenState extends State<InventoryScreen> {
                             separatorBuilder: (_, __) => const Divider(),
                             itemBuilder: (context, index) {
                               final b = batches[index];
+                              
+                              // Determine FIFO clearance priority flags dynamically
+                              final bool isFirstPriority = index == 0 && b.quantity > 0;
+                              final bool isExhausted = b.quantity <= 0;
+                              
+                              final badgeBgColor = isExhausted 
+                                  ? (isDark ? Colors.grey[800] : Colors.grey[200])
+                                  : (isFirstPriority ? Colors.green[50] : (isDark ? Colors.blueGrey[900] : Colors.blueGrey[50]));
+                              final badgeTextColor = isExhausted 
+                                  ? Colors.grey 
+                                  : (isFirstPriority ? Colors.green[700] : (isDark ? Colors.blueGrey[200] : Colors.blueGrey[800]));
+                              final String badgeLabel = isExhausted 
+                                  ? 'DEPLETED' 
+                                  : (isFirstPriority ? 'FIFO PRIORITY 1' : 'BATCH STACK ${index + 1}');
+
                               return ListTile(
-                                leading: CircleAvatar(backgroundColor: isDark ? Colors.grey[900] : Colors.white, child: Text('${index+1}')),
-                                title: Text('Supplier: ${b.supplier}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                leading: CircleAvatar(
+                                  backgroundColor: isFirstPriority ? Colors.green[600] : (isDark ? Colors.grey[900] : Colors.grey[100]), 
+                                  child: Text('${index + 1}', style: TextStyle(color: isFirstPriority ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold))
+                                ),
+                                title: Row(
+                                  children: [
+                                    Text('Supplier: ${b.supplier}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    const SizedBox(width: 12),
+                                    // SKU Handling Strategy Badge
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(color: badgeBgColor, borderRadius: BorderRadius.circular(6)),
+                                      child: Text(badgeLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: badgeTextColor, letterSpacing: 0.5)),
+                                    ),
+                                  ],
+                                ),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('Reason: ${b.restockReason}', style: const TextStyle(fontStyle: FontStyle.italic)),
-                                    Text('Cost: ${fmt.format(b.cost)}  •  Expires: ${DateFormat('MMM d, yyyy').format(DateTime.parse(b.expirationDate))}', style: TextStyle(color: Colors.grey[700])),                                  ],
+                                    const SizedBox(height: 2),
+                                    Text('Reason: ${b.restockReason}', style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 12)),
+                                    const SizedBox(height: 2),
+                                    Text('Cost: ${fmt.format(b.cost)}  •  Expires: ${DateFormat('MMM d, yyyy').format(DateTime.parse(b.expirationDate))}', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[700], fontSize: 12)), 
+                                  ],
                                 ),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
-                                        const Text('Qty', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                                        Text('${b.quantity}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
+                                        const Text('Stock Unit', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                        Text('${b.quantity}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isExhausted ? Colors.grey : Colors.blue[600])),
                                       ],
                                     ),
                                     const SizedBox(width: 8),
@@ -781,8 +826,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                       icon: const Icon(Icons.edit_note, color: Colors.orange, size: 24),
                                       onPressed: () async {
                                         await _showEditBatchDialog(dialogCtx, product, b, provider);
-                                        setDialogState(() {}); // Refresh popup
-                                        setState(() {}); // Refresh table
+                                        setDialogState(() {}); // Refresh popup state
+                                        setState(() {}); // Refresh inventory layout table
                                       },
                                     ),
                                   ],
